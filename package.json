@@ -1,0 +1,25 @@
+{
+  "name": "dumb-comedy-app",
+  "version": "1.0.0",
+  "description": "A mobile-first comedy web app with jokes, facts, and one-liners",
+  "main": "index.html",
+  "scripts": {
+    "start": "python -m http.server 8000",
+    "test": "echo 'Manual testing required'"
+  },
+  "keywords": [
+    "comedy",
+    "jokes",
+    "humor",
+    "facts",
+    "web-app",
+    "mobile-first",
+    "vanilla-javascript"
+  ],
+  "author": "Mustafiz2001",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mustafiz2001/DUMB.git"
+  }
+}
