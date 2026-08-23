@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="DUMB - A mobile-first comedy web app with hilarious jokes and facts">
+    <meta name="theme-color" content="#FF6B6B">
+    <title>DUMB - Comedy Web App</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo-wrapper">
+                <h1 class="logo">DUMB</h1>
+                <p class="tagline">It's not you, it's this app</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Card Section -->
+            <section class="card-section">
+                <div class="card" id="mainCard">
+                    <div class="card-content">
+                        <div class="joke-wrapper">
+                            <p class="joke-text" id="jokeText">Click the button to get started!</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Category Toggle -->
+            <section class="category-section">
+                <h2 class="section-title">Choose Your Flavor</h2>
+                <div class="category-buttons">
+                    <button class="category-btn active" data-category="all">All</button>
+                    <button class="category-btn" data-category="jokes">Jokes</button>
+                    <button class="category-btn" data-category="facts">Dumb Facts</button>
+                    <button class="category-btn" data-category="oneliners">One-Liners</button>
+                </div>
+            </section>
+
+            <!-- Action Buttons -->
+            <section class="action-section">
+                <button class="btn btn-primary" id="nextBtn">Get Next →</button>
+                <button class="btn btn-secondary" id="favoriteBtn">♡ Favorite</button>
+                <button class="btn btn-tertiary" id="shareBtn">Share 🚀</button>
+            </section>
+
+            <!-- Favorites Section -->
+            <section class="favorites-section" id="favoritesSection">
+                <h2 class="section-title">Your Favorites</h2>
+                <div class="favorites-list" id="favoritesList"></div>
+                <button class="btn btn-secondary" id="clearFavoritesBtn" style="display: none;">Clear All</button>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Made with 💙 and questionable humor</p>
+            <p class="version">v1.0.0</p>
+        </footer>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
