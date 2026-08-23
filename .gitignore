@@ -1,0 +1,49 @@
+# Logs
+logs/
+*.log
+
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Cache
+.cache/
+.parcel-cache/
+
+# OS
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# IDE config
+*.sublime-workspace
+*.sublime-project
+
+# Misc
+.prettierignore
+.prettierrc
