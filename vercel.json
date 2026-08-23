@@ -1,0 +1,6 @@
+{
+  "buildCommand": "echo 'DUMB is a static site - no build required'",
+  "outputDirectory": ".",
+  "framework": "static",
+  "public": true
+}
