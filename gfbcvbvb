@@ -1,0 +1,2822 @@
+const ComponentFunction = function() {
+  // @section:imports @depends:[]
+  var React = require('react');
+  var useState = React.useState;
+  var useEffect = React.useEffect;
+  var useContext = React.useContext;
+  var useMemo = React.useMemo;
+  var useCallback = React.useCallback;
+  var useRef = React.useRef;
+  var createContext = React.createContext;
+  var RN = require('react-native');
+  var View = RN.View;
+  var Text = RN.Text;
+  var StyleSheet = RN.StyleSheet;
+  var ScrollView = RN.ScrollView;
+  var TouchableOpacity = RN.TouchableOpacity;
+  var TextInput = RN.TextInput;
+  var Image = RN.Image;
+  var Modal = RN.Modal;
+  var Alert = RN.Alert;
+  var Platform = RN.Platform;
+  var StatusBar = RN.StatusBar;
+  var ActivityIndicator = RN.ActivityIndicator;
+  var FlatList = RN.FlatList;
+  var Animated = RN.Animated;
+  var Dimensions = RN.Dimensions;
+  var KeyboardAvoidingView = RN.KeyboardAvoidingView;
+  var Ionicons = require('@react-native-vector-icons/ionicons').Ionicons;
+  var MaterialIcons = require('@react-native-vector-icons/material-icons').MaterialIcons;
+  var createBottomTabNavigator = require('@react-navigation/bottom-tabs').createBottomTabNavigator;
+  var createStackNavigator = require('@react-navigation/stack').createStackNavigator;
+  var useSafeAreaInsets = require('react-native-safe-area-context').useSafeAreaInsets;
+  var platformHooks = require('platform-hooks');
+  var useQuery = platformHooks.useQuery;
+  var useMutation = platformHooks.useMutation;
+  var useStorage = platformHooks.useStorage;
+  var useCamera = platformHooks.useCamera;
+  var useShare = platformHooks.useShare;
+  var usePushNotifications = platformHooks.usePushNotifications;
+  // @end:imports
+
+  // @section:theme @depends:[]
+  var primaryColor = '#FF6B35';
+  var accentColor = '#F7931E';
+  var backgroundColor = '#0F0F0F';
+  var cardColor = '#1A1A1A';
+  var textPrimary = '#FFFFFF';
+  var textSecondary = '#B0B0B0';
+  var designStyle = 'modern';
+  var TAB_MENU_HEIGHT = Platform.OS === 'web' ? 56 : 49;
+  var SCROLL_EXTRA_PADDING = 16;
+  var WEB_TAB_MENU_PADDING = 90;
+  var FAB_SPACING = 16;
+  var HEADER_HEIGHT = 56;
+  var SCREEN_WIDTH = Dimensions.get('window').width;
+  // @end:theme
+
+  // @section:navigation-setup @depends:[]
+  var Tab = createBottomTabNavigator();
+  var Stack = createStackNavigator();
+  // @end:navigation-setup
+
+  // @section:AuthContext @depends:[theme]
+var AuthContext = React.createContext({
+  currentUser: null,
+  currentProfile: null,
+  isLoading: false,
+  isFirstTime: false,
+  isAnonymous: true,
+  login: function() {},
+  signUp: function() {},
+  logout: function() {},
+  updateProfile: function() {}
+});
+
+var AuthProvider = function(props) {
+  var userStorage = useStorage('currentUser', null);
+  var currentUser = userStorage[0];
+  var setCurrentUser = userStorage[1];
+  
+  var firstTimeStorage = useStorage('isFirstTime', false);
+  var isFirstTime = firstTimeStorage[0];
+  var setIsFirstTime = firstTimeStorage[1];
+  
+  var profilesQuery = useQuery('profiles', {});
+  var profilesMutate = useMutation('profiles', 'insert').mutate;
+  var profilesUpdate = useMutation('profiles', 'update').mutate;
+  
+  var isLoadingState = useState(false);
+  var isLoading = isLoadingState[0];
+  var setIsLoading = isLoadingState[1];
+  
+  var isAnonymous = !currentUser;
+  
+  var currentProfile = useMemo(function() {
+    if (!currentUser) return null;
+    var profiles = profilesQuery.data || [];
+    return profiles.find(function(p) { return p.owner_id === currentUser.id; }) || null;
+  }, [currentUser, profilesQuery.data]);
+  
+  var login = useCallback(function(email, password) {
+    setIsLoading(true);
+    setTimeout(function() {
+      var profiles = profilesQuery.data || [];
+      var existingProfile = profiles.find(function(p) { return p.email === email; });
+      
+      if (!existingProfile) {
+        setIsLoading(false);
+        Platform.OS === 'web'
+          ? window.alert('Account not found. Please sign up first.')
+          : Alert.alert('Not Found', 'Account not found. Please sign up first.');
+        return;
+      }
+      
+      var mockUser = {
+        id: existingProfile.owner_id,
+        email: email,
+        created_at: existingProfile.created_at
+      };
+      setCurrentUser(mockUser);
+      setIsFirstTime(false);
+      setIsLoading(false);
+    }, 500);
+  }, [profilesQuery.data]);
+  
+  var signUp = useCallback(function(email, password, displayName) {
+    setIsLoading(true);
+    setTimeout(function() {
+      var profiles = profilesQuery.data || [];
+      var exists = profiles.some(function(p) { return p.email === email; });
+      
+      if (exists) {
+        setIsLoading(false);
+        Platform.OS === 'web'
+          ? window.alert('Email already registered.')
+          : Alert.alert('Exists', 'Email already registered.');
+        return;
+      }
+      
+      var newUserId = 'user-' + Date.now();
+      var newUser = {
+        id: newUserId,
+        email: email,
+        created_at: new Date().toISOString()
+      };
+      
+      var newProfile = {
+        id: 'profile-' + newUserId,
+        owner_id: newUserId,
+        email: email,
+        display_name: displayName,
+        username: displayName.toLowerCase().replace(/\s+/g, '_'),
+        avatar_url: null,
+        bio: '',
+        created_at: new Date().toISOString()
+      };
+      
+      profilesMutate(newProfile).then(function() {
+        setCurrentUser(newUser);
+        setIsFirstTime(true);
+        setIsLoading(false);
+      }).catch(function(err) {
+        setIsLoading(false);
+        Platform.OS === 'web'
+          ? window.alert('Failed to create account.')
+          : Alert.alert('Error', 'Failed to create account.');
+      });
+    }, 500);
+  }, [profilesQuery.data, profilesMutate]);
+  
+  var logout = useCallback(function() {
+    setCurrentUser(null);
+    setIsFirstTime(false);
+  }, []);
+  
+  var updateProfile = useCallback(function(profileData) {
+    if (!currentUser) return;
+    profilesUpdate({
+      id: currentProfile.id,
+      ...profileData
+    }).then(function() {
+      profilesQuery.refetch();
+    });
+  }, [currentUser, currentProfile, profilesUpdate, profilesQuery]);
+  
+  var value = useMemo(function() {
+    return {
+      currentUser: currentUser,
+      currentProfile: currentProfile,
+      isLoading: isLoading,
+      isFirstTime: isFirstTime,
+      isAnonymous: isAnonymous,
+      login: login,
+      signUp: signUp,
+      logout: logout,
+      updateProfile: updateProfile
+    };
+  }, [currentUser, currentProfile, isLoading, isFirstTime, isAnonymous]);
+  
+  return React.createElement(AuthContext.Provider, { value: value }, props.children);
+};
+
+var useAuth = function() { return useContext(AuthContext); };
+// @end:AuthContext
+
+  // @section:ThemeContext @depends:[theme]
+  var ThemeContext = React.createContext({
+    theme: {
+      colors: {
+        primary: primaryColor,
+        accent: accentColor,
+        background: backgroundColor,
+        card: cardColor,
+        textPrimary: textPrimary,
+        textSecondary: textSecondary,
+        border: '#2A2A2A',
+        success: '#10B981',
+        error: '#EF4444',
+        warning: '#F59E0B'
+      }
+    },
+    darkMode: true,
+    designStyle: designStyle
+  });
+  var ThemeProvider = function(props) {
+    var lightColors = useMemo(function() {
+      return {
+        primary: primaryColor,
+        accent: accentColor,
+        background: backgroundColor,
+        card: cardColor,
+        textPrimary: textPrimary,
+        textSecondary: textSecondary,
+        border: '#2A2A2A',
+        success: '#10B981',
+        error: '#EF4444',
+        warning: '#F59E0B'
+      };
+    }, []);
+    var value = useMemo(function() {
+      return {
+        theme: { colors: lightColors },
+        darkMode: true,
+        designStyle: designStyle
+      };
+    }, [lightColors]);
+    return React.createElement(ThemeContext.Provider, { value: value }, props.children);
+  };
+  var useTheme = function() { return useContext(ThemeContext); };
+  // @end:ThemeContext
+
+  // @section:dumb-score-utils @depends:[]
+  var DUMB_TRIGGER_WORDS = [
+    'forgot', 'accidentally', 'mistake', 'wrong', 'oops', 'lost', 'broke', 'late',
+    'stupid', 'dumb', 'somehow', 'apparently', 'realized', 'confused', 'embarrassing',
+    'awkward', 'disaster', 'failed', 'dropped', 'spilled', 'burned', 'mixed up',
+    'thought', 'supposed to', 'idiot', 'worst', 'never', 'always', 'literally',
+    'actually', 'basically', 'honestly', 'clearly', 'obviously', 'definitely',
+    'accidentally sent', 'wrong person', 'by mistake', 'without thinking', 'too late',
+    'no idea', 'have no', "didn't realize", "didn't notice", 'only realized',
+    'walked into', 'fell asleep', 'woke up', 'missed', 'forgot about', 'too early',
+    'too late', 'spent hours', 'entire day', 'whole time', 'this whole', 'whole thing'
+  ];
+  var SELF_AWARE_PHRASES = [
+    "i didn't", "i forgot", "i thought", "i was", "apparently i",
+    "turns out", "only to", "somehow i", "i just", "i keep", "i always",
+    "for some reason", "without realizing", "by accident", "i realized",
+    "i completely", "i actually", "i genuinely", "i honestly", "i swear"
+  ];
+  function calculateDumbScore(text) {
+    if (!text || text.trim().length === 0) { return { score: 0, title: 'Nothing Yet', emoji: '🤔' }; }
+    var score = 0;
+    var lower = text.toLowerCase();
+    var words = text.split(/\s+/).filter(function(w) { return w.length > 0; });
+    var wordCount = words.length;
+    score += Math.min(Math.floor(wordCount * 1.5), 18);
+    var triggerCount = 0;
+    for (var i = 0; i < DUMB_TRIGGER_WORDS.length; i++) {
+      if (lower.indexOf(DUMB_TRIGGER_WORDS[i]) !== -1) {
+        triggerCount++;
+        score += 7;
+      }
+    }
+    var selfCount = 0;
+    for (var j = 0; j < SELF_AWARE_PHRASES.length; j++) {
+      if (lower.indexOf(SELF_AWARE_PHRASES[j]) !== -1) {
+        selfCount++;
+        score += 5;
+      }
+    }
+    var questionCount = (text.match(/\?/g) || []).length;
+    score += questionCount * 4;
+    var exclamationCount = (text.match(/!/g) || []).length;
+    score += Math.min(exclamationCount * 3, 12);
+    var capsLetters = (text.match(/[A-Z]/g) || []).length;
+    var totalLetters = (text.match(/[a-zA-Z]/g) || []).length;
+    var capsRatio = totalLetters > 0 ? capsLetters / totalLetters : 0;
+    if (capsRatio > 0.4) score += 18;
+    else if (capsRatio > 0.25) score += 10;
+    else if (capsRatio > 0.1) score += 4;
+    var sentences = text.split(/[.!?]+/).filter(function(s) { return s.trim().length > 2; }).length;
+    if (sentences >= 4) score += 8;
+    else if (sentences >= 2) score += 4;
+    var ellipsis = (text.match(/\.\.\./g) || []).length;
+    score += Math.min(ellipsis * 3, 9);
+    var emojiPattern = /[\u{1F300}-\u{1F9FF}]/gu;
+    var emojiCount = (text.match(emojiPattern) || []).length;
+    score += Math.min(emojiCount * 2, 8);
+    score = Math.max(1, Math.min(100, score));
+    var title, emoji;
+    if (score >= 90) { title = 'LEGENDARY DUMB'; emoji = '💀'; }
+    else if (score >= 70) { title = 'Certified DUMB'; emoji = '🤦'; }
+    else if (score >= 40) { title = 'Questionable'; emoji = '😬'; }
+    else { title = 'Mostly Normal'; emoji = '😐'; }
+    return { score: score, title: title, emoji: emoji };
+  }
+  function getDumbColor(score) {
+    if (score >= 90) return '#FF2D55';
+    if (score >= 70) return '#FF6B35';
+    if (score >= 40) return '#F7931E';
+    return '#4CAF50';
+  }
+  function formatTimeAgo(isoString) {
+    if (!isoString) return '';
+    var now = new Date();
+    var then = new Date(isoString);
+    var diff = Math.floor((now - then) / 1000);
+    if (diff < 60) return diff + 's';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h';
+    return Math.floor(diff / 86400) + 'd';
+  }
+  // @end:dumb-score-utils
+
+  // @section:seed-data @depends:[dumb-score-utils]
+  var SEED_POSTS = [
+    {
+      id: 'seed-1',
+      content: "I spent 45 minutes looking for my glasses... while wearing them. On my face. The whole time. I asked my wife three times to help me find them.",
+      owner_id: 'seed-user-1',
+      username: 'dumbdave',
+      display_name: 'Dave the Dumb',
+      avatar_url: null,
+      dumb_score: 88,
+      dumb_title: 'Certified DUMB',
+      dumb_emoji: '🤦',
+      likes_count: 247,
+      comments_count: 43,
+      created_at_post: new Date(Date.now() - 3600000 * 2).toISOString(),
+      image_url: null
+    },
+    {
+      id: 'seed-2',
+      content: "I accidentally texted my boss 'haha loser' instead of my friend. He was messaging me about a raise. I start at a new job next week somehow???",
+      owner_id: 'seed-user-2',
+      username: 'catastrophic_carol',
+      display_name: 'Carol Catastrophe',
+      avatar_url: null,
+      dumb_score: 97,
+      dumb_title: 'LEGENDARY DUMB',
+      dumb_emoji: '💀',
+      likes_count: 1842,
+      comments_count: 312,
+      created_at_post: new Date(Date.now() - 3600000 * 5).toISOString(),
+      image_url: null
+    },
+    {
+      id: 'seed-3',
+      content: "Forgot my password. Reset it. Immediately forgot the new one. This happened 7 times. I now have 7 emails saying 'your account was reset'.",
+      owner_id: 'seed-user-3',
+      username: 'forgetful_frank',
+      display_name: 'Frank Forgetful',
+      avatar_url: null,
+      dumb_score: 72,
+      dumb_title: 'Certified DUMB',
+      dumb_emoji: '🤦',
+      likes_count: 589,
+      comments_count: 78,
+      created_at_post: new Date(Date.now() - 3600000 * 8).toISOString(),
+      image_url: null
+    },
+    {
+      id: 'seed-4',
+      content: "Opened the fridge. Forgot what I wanted. Closed it. Opened it again immediately. Still forgot. Did this four times in a row. My roommate filmed it.",
+      owner_id: 'seed-user-4',
+      username: 'brainvacation',
+      display_name: 'Brain on Vacation',
+      avatar_url: null,
+      dumb_score: 65,
+      dumb_title: 'Questionable',
+      dumb_emoji: '😬',
+      likes_count: 334,
+      comments_count: 55,
+      created_at_post: new Date(Date.now() - 3600000 * 12).toISOString(),
+      image_url: null
+    },
+    {
+      id: 'seed-5',
+      content: "I submitted my entire assignment in comic sans as a joke to myself. I was going to change it. I did not change it. Professor loved it actually.",
+      owner_id: 'seed-user-5',
+      username: 'accidental_genius',
+      display_name: 'Accidental Genius',
+      avatar_url: null,
+      dumb_score: 54,
+      dumb_title: 'Questionable',
+      dumb_emoji: '😬',
+      likes_count: 721,
+      comments_count: 99,
+      created_at_post: new Date(Date.now() - 3600000 * 20).toISOString(),
+      image_url: null
+    },
+    {
+      id: 'seed-6',
+      content: "I am a professional adult. I have a job. Today I tried to push a door that said PULL for a full minute before an 8-year-old opened it from the other side effortlessly.",
+      owner_id: 'seed-user-6',
+      username: 'professional_mistake',
+      display_name: 'Pro at Mistakes',
+      avatar_url: null,
+      dumb_score: 79,
+      dumb_title: 'Certified DUMB',
+      dumb_emoji: '🤦',
+      likes_count: 1103,
+      comments_count: 187,
+      created_at_post: new Date(Date.now() - 3600000 * 30).toISOString(),
+      image_url: null
+    }
+  ];
+  var DAILY_QUESTION = "What's the dumbest thing you've done this week that you'd never admit IRL? 👀";
+  var BADGES_CONFIG = {
+    first_dumb: { label: 'First Dumb', emoji: '🥉', description: 'Posted your first confession', color: '#CD7F32' },
+    certified_dumb: { label: 'Certified DUMB', emoji: '🔥', description: 'Scored 70+ on the DUMB-O-METER™', color: '#FF6B35' },
+    legendary_dumb: { label: 'Legendary DUMB', emoji: '💀', description: 'Scored 90+ on the DUMB-O-METER™', color: '#FF2D55' },
+    professional_mistake: { label: 'Professional Mistake', emoji: '🤦', description: '5 posts with 60+ score', color: '#9B59B6' },
+    brain_on_vacation: { label: 'Brain on Vacation', emoji: '🧠', description: '10 total confessions posted', color: '#3498DB' },
+    hall_of_shame: { label: 'Hall of Shame', emoji: '🏆', description: 'Top 10 all-time leaderboard', color: '#F7931E' }
+  };
+  // @end:seed-data
+
+  // @section:ContextualTip @depends:[theme]
+  var ContextualTip = function(props) {
+    var visible = props.visible || false;
+    var text = props.text || '';
+    var onDismiss = props.onDismiss || function() {};
+    var position = props.position || 'top';
+    if (!visible) return null;
+    return React.createElement(View, {
+      style: {
+        backgroundColor: primaryColor + 'CC',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 8,
+        marginHorizontal: 16,
+        marginVertical: 8,
+        flexDirection: 'row',
+        alignItems: 'center'
+      },
+      componentId: 'contextual-tip'
+    },
+      React.createElement(Text, { style: { fontSize: 14, marginRight: 8 } }, '💡'),
+      React.createElement(Text, { style: { color: '#FFFFFF', fontSize: 12, flex: 1, lineHeight: 16 } }, text),
+      React.createElement(TouchableOpacity, {
+        onPress: onDismiss,
+        style: { padding: 4 }
+      },
+        React.createElement(Ionicons, { name: 'close', size: 16, color: '#FFFFFF' })
+      )
+    );
+  };
+  // @end:ContextualTip
+
+  // @section:DumbMeter @depends:[dumb-score-utils,theme]
+  var DumbMeter = function(props) {
+    var score = props.score || 0;
+    var title = props.title || '';
+    var emoji = props.emoji || '';
+    var compact = props.compact || false;
+    var animRef = useRef(new Animated.Value(0));
+    useEffect(function() {
+      Animated.timing(animRef.current, {
+        toValue: score / 100,
+        duration: 600,
+        useNativeDriver: false
+      }).start();
+    }, [score]);
+    var dumbColor = getDumbColor(score);
+    var barWidth = animRef.current.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0%', '100%']
+    });
+    if (compact) {
+      return React.createElement(View, {
+        style: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: '#0F0F0F',
+          borderRadius: 8,
+          padding: 8,
+          marginTop: 8,
+          borderWidth: 1,
+          borderColor: dumbColor + '40'
+        },
+        componentId: 'dumb-meter-compact'
+      },
+        React.createElement(Text, { style: { fontSize: 16, marginRight: 6 } }, emoji),
+        React.createElement(View, { style: { flex: 1 } },
+          React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 } },
+            React.createElement(Text, { style: { color: dumbColor, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 } }, 'DUMB-O-METER™'),
+            React.createElement(Text, { style: { color: dumbColor, fontSize: 12, fontWeight: '800' } }, score + '/100')
+          ),
+          React.createElement(View, { style: { height: 4, backgroundColor: '#2A2A2A', borderRadius: 2, overflow: 'hidden' } },
+            React.createElement(Animated.View, { style: { height: 4, width: barWidth, backgroundColor: dumbColor, borderRadius: 2 } })
+          )
+        ),
+        React.createElement(Text, { style: { color: dumbColor, fontSize: 10, fontWeight: '700', marginLeft: 8 } }, title)
+      );
+    }
+    return React.createElement(View, {
+      style: {
+        backgroundColor: '#0D0D0D',
+        borderRadius: 16,
+        padding: 20,
+        marginVertical: 8,
+        borderWidth: 1,
+        borderColor: dumbColor + '60'
+      },
+      componentId: 'dumb-meter-full'
+    },
+      React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 } },
+        React.createElement(View, null,
+          React.createElement(Text, { style: { color: textSecondary, fontSize: 11, fontWeight: '600', letterSpacing: 1.5 } }, 'DUMB-O-METER™'),
+          React.createElement(Text, { style: { color: textPrimary, fontSize: 28, fontWeight: '900', marginTop: 2 } }, score + ' / 100')
+        ),
+        React.createElement(View, { style: { alignItems: 'center' } },
+          React.createElement(Text, { style: { fontSize: 40 } }, emoji),
+          React.createElement(Text, { style: { color: dumbColor, fontSize: 11, fontWeight: '800', marginTop: 4, textAlign: 'center' } }, title)
+        )
+      ),
+      React.createElement(View, { style: { height: 12, backgroundColor: '#1A1A1A', borderRadius: 6, overflow: 'hidden' } },
+        React.createElement(Animated.View, {
+          style: {
+            height: 12,
+            width: barWidth,
+            backgroundColor: dumbColor,
+            borderRadius: 6,
+            shadowColor: dumbColor,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.8,
+            shadowRadius: 6,
+            elevation: 4
+          }
+        })
+      ),
+      React.createElement(View, { style: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 } },
+        React.createElement(Text, { style: { color: '#4CAF50', fontSize: 9, fontWeight: '600' } }, 'NORMAL'),
+        React.createElement(Text, { style: { color: '#F7931E', fontSize: 9, fontWeight: '600' } }, 'QUESTIONABLE'),
+        React.createElement(Text, { style: { color: '#FF6B35', fontSize: 9, fontWeight: '600' } }, 'CERTIFIED'),
+        React.createElement(Text, { style: { color: '#FF2D55', fontSize: 9, fontWeight: '600' } }, 'LEGENDARY')
+      )
+    );
+  };
+  // @end:DumbMeter
+
+  // @section:PostCard @depends:[DumbMeter,dumb-score-utils,theme]
+  var PostCard = function(props) {
+    var post = props.post;
+    var onPress = props.onPress;
+    var onLike = props.onLike;
+    var themeContext = useTheme();
+    var theme = themeContext.theme;
+    var likedState = useState(false);
+    var liked = likedState[0];
+    var setLiked = likedState[1];
+    var dumbColor = getDumbColor(post.dumb_score || 0);
+    var avatarLetter = (post.display_name || post.username || 'U').charAt(0).toUpperCase();
+    var handleLike = function() {
+      setLiked(function(prev) { return !prev; });
+      if (onLike) onLike(post.id);
+    };
+    return React.createElement(TouchableOpacity, {
+      style: {
+        backgroundColor: cardColor,
+        borderRadius: 16,
+        marginHorizontal: 16,
+        marginVertical: 6,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#2A2A2A'
+      },
+      onPress: onPress,
+      activeOpacity: 0.8,
+      componentId: 'post-card-' + post.id
+    },
+      React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 } },
+        React.createElement(View, {
+          style: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: dumbColor + '33',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: 2,
+            borderColor: dumbColor + '60'
+          }
+        },
+          post.avatar_url
+            ? React.createElement(Image, { source: { uri: post.avatar_url }, style: { width: 40, height: 40, borderRadius: 20 } })
+            : React.createElement(Text, { style: { color: dumbColor, fontWeight: '800', fontSize: 16 } }, avatarLetter)
+        ),
+        React.createElement(View, { style: { flex: 1, marginLeft: 10 } },
+          React.createElement(Text, { style: { color: textPrimary, fontWeight: '700', fontSize: 14 } }, post.display_name || post.username || 'Anonymous Dumb'),
+          React.createElement(Text, { style: { color: textSecondary, fontSize: 12 } }, '@' + (post.username || 'anonymous') + ' · ' + formatTimeAgo(post.created_at_post))
+        ),
+        React.createElement(View, {
+          style: {
+            backgroundColor: dumbColor + '20',
+            borderRadius: 8,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderWidth: 1,
+            borderColor: dumbColor + '40'
+          }
+        },
+          React.createElement(Text, { style: { color: dumbColor, fontWeight: '900', fontSize: 13 } }, post.dumb_emoji + ' ' + (post.dumb_score || 0))
+        )
+      ),
+      React.createElement(Text, {
+        style: { color: textPrimary, fontSize: 15, lineHeight: 22, marginBottom: 12 },
+        numberOfLines: 4
+      }, post.content),
+      post.image_url ? React.createElement(Image, {
+        source: { uri: post.image_url },
+        style: { width: '100%', height: 180, borderRadius: 12, marginBottom: 12, backgroundColor: '#2A2A2A' },
+        resizeMode: 'cover'
+      }) : null,
+      React.createElement(View, {
+        style: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: '#0D0D0D',
+          borderRadius: 8,
+          padding: 8,
+          marginBottom: 12,
+          borderWidth: 1,
+          borderColor: dumbColor + '30'
+        }
+      },
+        React.createElement(Text, { style: { fontSize: 12, marginRight: 4 } }, post.dumb_emoji || '😐'),
+        React.createElement(View, { style: { flex: 1 } },
+          React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 } },
+            React.createElement(Text, { style: { color: dumbColor, fontSize: 9, fontWeight: '700', letterSpacing: 0.5 } }, 'DUMB-O-METER™'),
+            React.createElement(Text, { style: { color: dumbColor, fontSize: 11, fontWeight: '800' } }, (post.dumb_score || 0) + '/100')
+          ),
+          React.createElement(View, { style: { height: 4, backgroundColor: '#2A2A2A', borderRadius: 2, overflow: 'hidden' } },
+            React.createElement(View, { style: { height: 4, width: ((post.dumb_score || 0) + '%'), backgroundColor: dumbColor, borderRadius: 2 } })
+          )
+        ),
+        React.createElement(Text, { style: { color: dumbColor, fontSize: 10, fontWeight: '700', marginLeft: 8 } }, post.dumb_title || 'Mostly Normal')
+      ),
+      React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center' } },
+        React.createElement(TouchableOpacity, {
+          style: { flexDirection: 'row', alignItems: 'center', marginRight: 20 },
+          onPress: handleLike,
+          componentId: 'like-btn-' + post.id
+        },
+          React.createElement(Ionicons, {
+            name: liked ? 'heart' : 'heart-outline',
+            size: 18,
+            color: liked ? '#FF2D55' : textSecondary
+          }),
+          React.createElement(Text, { style: { color: liked ? '#FF2D55' : textSecondary, fontSize: 13, marginLeft: 4, fontWeight: '600' } },
+            (liked ? (post.likes_count || 0) + 1 : (post.likes_count || 0)).toString()
+          )
+        ),
+        React.createElement(TouchableOpacity, {
+          style: { flexDirection: 'row', alignItems: 'center', marginRight: 20 },
+          onPress: onPress,
+          componentId: 'comment-btn-' + post.id
+        },
+          React.createElement(Ionicons, { name: 'chatbubble-outline', size: 17, color: textSecondary }),
+          React.createElement(Text, { style: { color: textSecondary, fontSize: 13, marginLeft: 4, fontWeight: '600' } }, (post.comments_count || 0).toString())
+        ),
+        React.createElement(TouchableOpacity, {
+          style: { flexDirection: 'row', alignItems: 'center' },
+          onPress: function() {},
+          componentId: 'share-btn-' + post.id
+        },
+          React.createElement(Ionicons, { name: 'arrow-redo-outline', size: 17, color: textSecondary }),
+          React.createElement(Text, { style: { color: textSecondary, fontSize: 13, marginLeft: 4, fontWeight: '600' } }, 'Share')
+        )
+      )
+    );
+  };
+  // @end:PostCard
+
+  // @section:SignUpScreen @depends:[theme,AuthContext,dumb-score-utils]
+  var SignUpScreen = function(props) {
+    var navigation = props.navigation;
+    var authCtx = useAuth();
+    var insets = useSafeAreaInsets();
+    var emailState = useState('');
+    var email = emailState[0];
+    var setEmail = emailState[1];
+    var passwordState = useState('');
+    var password = passwordState[0];
+    var setPassword = passwordState[1];
+    var displayNameState = useState('');
+    var displayName = displayNameState[0];
+    var setDisplayName = displayNameState[1];
+    var errorState = useState('');
+    var error = errorState[0];
+    var setError = errorState[1];
+    var handleSignUp = function() {
+      setError('');
+      if (!email.trim() || !password.trim() || !displayName.trim()) {
+        setError('All fields are required');
+        return;
+      }
+      if (password.length < 6) {
+        setError('Password must be at least 6 characters');
+        return;
+      }
+      authCtx.signUp(email, password, displayName);
+      navigation.navigate('Onboarding');
+    };
+    return React.createElement(View, { style: { flex: 1, backgroundColor: backgroundColor } },
+      React.createElement(ScrollView, {
+        style: { flex: 1 },
+        contentContainerStyle: { paddingTop: insets.top + 20, paddingHorizontal: 16, paddingBottom: 40 },
+        showsVerticalScrollIndicator: false
+      },
+        React.createElement(View, { style: { alignItems: 'center', marginBottom: 32 } },
+          React.createElement(Text, { style: { color: primaryColor, fontWeight: '900', fontSize: 48, letterSpacing: -2 }, componentId: 'signup-logo' }, 'DUMB'),
+          React.createElement(Text, { style: { color: textSecondary, fontSize: 16, marginTop: 8 } }, 'Confess. Share. Laugh. Repeat.')
+        ),
+        React.createElement(View, { style: { marginBottom: 16 } },
+          React.createElement(Text, { style: { color: textPrimary, fontWeight: '700', fontSize: 14, marginBottom: 8 } }, 'Display Name'),
+          React.createElement(TextInput, {
+            style: {
+              backgroundColor: cardColor,
+              borderRadius: 12,
+              padding: 12,
+              color: textPrimary,
+              fontSize: 15,
+              borderWidth: 1,
+              borderColor: error ? '#EF4444' : '#2A2A2A'
+            },
+            placeholder: 'Your funny name...',
+            placeholderTextColor: textSecondary,
+            value: displayName,
+            onChangeText: setDisplayName,
+            autoCapitalize: 'words',
+            componentId: 'signup-name-input'
+          })
+        ),
+        React.createElement(View, { style: { marginBottom: 16 } },
+          React.createElement(Text, { style: { color: textPrimary, fontWeight: '700', fontSize: 14, marginBottom: 8 } }, 'Email'),
+          React.createElement(TextInput, {
+            style: {
+              backgroundColor: cardColor,
+              borderRadius: 12,
+              padding: 12,
+              color: textPrimary,
+              fontSize: 15,
+              borderWidth: 1,
+              borderColor: error ? '#EF4444' : '#2A2A2A'
+            },
+            placeholder: 'your@email.com',
+            placeholderTextColor: textSecondary,
+            value: email,
+            onChangeText: setEmail,
+            autoCapitalize: 'none',
+            keyboardType: 'email-address',
+            componentId: 'signup-email-input'
+          })
+        ),
+        React.createElement(View, { style: { marginBottom: 16 } },
+          React.createElement(Text, { style: { color: textPrimary, fontWeight: '700', fontSize: 14, marginBottom: 8 } }, 'Password'),
+          React.createElement(TextInput, {
+            style: {
+              backgroundColor: cardColor,
+              borderRadius: 12,
+              padding: 12,
+              color: textPrimary,
+              fontSize: 15,
+              borderWidth: 1,
+              borderColor: error ? '#EF4444' : '#2A2A2A'
+            },
+            placeholder: 'At least 6 characters',
+            placeholderTextColor: textSecondary,
+            value: password,
+            onChangeText: setPassword,
+            secureTextEntry: true,
+            autoCapitalize: 'none',
+            componentId: 'signup-password-input'
+          })
+        ),
+        error ? React.createElement(View, {
+          style: {
+            backgroundColor: '#EF4444' + '20',
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 16,
+            borderWidth: 1,
+            borderColor: '#EF4444' + '50'
+          }
+        },
+          React.createElement(Text, { style: { color: '#EF4444', fontSize: 13 } }, error)
+        ) : null,
+        React.createElement(TouchableOpacity, {
+          style: {
+            backgroundColor: primaryColor,
+            borderRadius: 12,
+            padding: 16,
+            alignItems: 'center',
+            marginBottom: 16
+          },
+          onPress: handleSignUp,
+          disabled: authCtx.isLoading,
+          componentId: 'signup-submit-btn'
+        },
+          authCtx.isLoading
+            ? React.createElement(ActivityIndicator, { size: 'small', color: '#FFFFFF' })
+            : React.createElement(Text, { style: { color: '#FFFFFF', fontWeight: '800', fontSize: 16 } }, 'Create Account')
+        ),
+        React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' } },
+          React.createElement(Text, { style: { color: textSecondary, fontSize: 14 } }, 'Already have an account? '),
+          React.createElement(TouchableOpacity, {
+            onPress: function() { navigation.navigate('Login'); },
+            componentId: 'signup-login-link'
+          },
+            React.createElement(Text, { style: { color: primaryColor, fontWeight: '700', fontSize: 14 } }, 'Log in')
+          )
+        )
+      )
+    );
+  };
+  // @end:SignUpScreen
+
+  // @section:LoginScreen @depends:[theme,AuthContext]
+  var LoginScreen = function(props) {
+    var navigation = props.navigation;
+    var authCtx = useAuth();
+    var insets = useSafeAreaInsets();
+    var emailState = useState('');
+    var email = emailState[0];
+    var setEmail = emailState[1];
+    var passwordState = useState('');
+    var password = passwordState[0];
+    var setPassword = passwordState[1];
+    var errorState = useState('');
+    var error = errorState[0];
+    var setError = errorState[1];
+    var handleLogin = function() {
+      setError('');
+      if (!email.trim() || !password.trim()) {
+        setError('Email and password are required');
+        return;
+      }
+      authCtx.login(email, password);
+    };
+    return React.createElement(View, { style: { flex: 1, backgroundColor: backgroundColor } },
+      React.createElement(ScrollView, {
+        style: { flex: 1 },
+        contentContainerStyle: { paddingTop: insets.top + 40, paddingHorizontal: 16, paddingBottom: 40 },
+        showsVerticalScrollIndicator: false
+      },
+        React.createElement(TouchableOpacity, {
+          onPress: function() { navigation.goBack(); },
+          style: { marginBottom: 24 },
+          componentId: 'login-back-btn'
+        },
+          React.createElement(Ionicons, { name: 'arrow-back', size: 24, color: textSecondary })
+        ),
+        React.createElement(View, { style: { alignItems: 'center', marginBottom: 32 } },
+          React.createElement(Text, { style: { color: primaryColor, fontWeight: '900', fontSize: 48, letterSpacing: -2 }, componentId: 'login-logo' }, 'DUMB'),
+          React.createElement(Text, { style: { color: textSecondary, fontSize: 16, marginTop: 8 } }, 'Welcome back, dumbnerd! 🤦')
+        ),
+        React.createElement(View, { style: { marginBottom: 16 } },
+          React.createElement(Text, { style: { color: textPrimary, fontWeight: '700', fontSize: 14, marginBottom: 8 } }, 'Email'),
+          React.createElement(TextInput, {
+            style: {
+              backgroundColor: cardColor,
+              borderRadius: 12,
+              padding: 12,
+              color: textPrimary,
+              fontSize: 15,
+              borderWidth: 1,
+              borderColor: error ? '#EF4444' : '#2A2A2A'
+            },
+            placeholder: 'your@email.com',
+            placeholderTextColor: textSecondary,
+            value: email,
+            onChangeText: setEmail,
+            autoCapitalize: 'none',
+            keyboardType: 'email-address',
+            componentId: 'login-email-input'
+          })
+        ),
+        React.createElement(View, { style: { marginBottom: 16 } },
+          React.createElement(Text, { style: { color: textPrimary, fontWeight: '700', fontSize: 14, marginBottom: 8 } }, 'Password'),
+          React.createElement(TextInput, {
+            style: {
+              backgroundColor: cardColor,
+              borderRadius: 12,
+              padding: 12,
+              color: textPrimary,
+              fontSize: 15,
+              borderWidth: 1,
+              borderColor: error ? '#EF4444' : '#2A2A2A'
+            },
+            placeholder: 'Your password',
+            placeholderTextColor: textSecondary,
+            value: password,
+            onChangeText: setPassword,
+            secureTextEntry: true,
+            autoCapitalize: 'none',
+            componentId: 'login-password-input'
+          })
+        ),
+        error ? React.createElement(View, {
+          style: {
+            backgroundColor: '#EF4444' + '20',
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 16,
+            borderWidth: 1,
+            borderColor: '#EF4444' + '50'
+          }
+        },
+          React.createElement(Text, { style: { color: '#EF4444', fontSize: 13 } }, error)
+        ) : null,
+        React.createElement(TouchableOpacity, {
+          style: {
+            backgroundColor: primaryColor,
+            borderRadius: 12,
+            padding: 16,
+            alignItems: 'center',
+            marginBottom: 16
+          },
+          onPress: handleLogin,
+          disabled: authCtx.isLoading,
+          componentId: 'login-submit-btn'
+        },
+          authCtx.isLoading
+            ? React.createElement(ActivityIndicator, { size: 'small', color: '#FFFFFF' })
+            : React.createElement(Text, { style: { color: '#FFFFFF', fontWeight: '800', fontSize: 16 } }, 'Log In')
+        ),
+        React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' } },
+          React.createElement(Text, { style: { color: textSecondary, fontSize: 14 } }, "Don't have an account? "),
+          React.createElement(TouchableOpacity, {
+            onPress: function() { navigation.navigate('SignUp'); },
+            componentId: 'login-signup-link'
+          },
+            React.createElement(Text, { style: { color: primaryColor, fontWeight: '700', fontSize: 14 } }, 'Sign up')
+          )
+        )
+      )
+    );
+  };
+  // @end:LoginScreen
+
+  // @section:OnboardingTutorial @depends:[theme,AuthContext]
+  var OnboardingTutorial = function(props) {
+    var navigation = props.navigation;
+    var authCtx = useAuth();
+    var insets = useSafeAreaInsets();
+    var currentStepState = useState(0);
+    var currentStep = currentStepState[0];
+    var setCurrentStep = currentStepState[1];
+    var steps = [
+      {
+        emoji: '🤦',
+        title: 'Welcome to DUMB',
+        description: 'A place to share your funniest mistakes, embarrassing moments, and questionable decisions.'
+      },
+      {
+        emoji: '📝',
+        title: 'Create a Confession',
+        description: 'Write about your dumb moment. The DUMB-O-METER™ will calculate how dumb it is in real-time.'
+      },
+      {
+        emoji: '🔥',
+        title: 'DUMB-O-METER™',
+        description: 'Scored from 1-100. Legendary DUMB? You\'re basically a celebrity.'
+      },
+      {
+        emoji: '🏆',
+        title: 'Climb the Leaderboard',
+        description: 'Compete with others for the highest DUMB scores and earn badges.'
+      },
+      {
+        emoji: '👥',
+        title: 'Follow & Engage',
+        description: 'Follow funny people, like confessions, and comment. Build your community.'
+      }
+    ];
+    var handleNext = function() {
+      if (currentStep < steps.length - 1) {
+        setCurrentStep(currentStep + 1);
+      } else {
+        navigation.navigate('MainTabs');
+      }
+    };
+    var handleSkip = function() {
+      navigation.navigate('MainTabs');
+    };
+    var step = steps[currentStep];
+    return React.createElement(View, { style: { flex: 1, backgroundColor: backgroundColor } },
+      React.createElement(View, {
+        style: {
+          paddingTop: insets.top + 20,
+          paddingHorizontal: 20,
+          paddingBottom: 20,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }
+      },
+        React.createElement(Text, { style: { color: textSecondary, fontSize: 13 } }, (currentStep + 1) + ' / ' + steps.length),
+        React.createElement(TouchableOpacity, {
+          onPress: handleSkip,
+          componentId: 'onboarding-skip-btn'
+        },
+          React.createElement(Text, { style: { color: textSecondary, fontWeight: '600', fontSize: 14 } }, 'Skip')
+        )
+      ),
+      React.createElement(View, { style: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 } },
+        React.createElement(Text, { style: { fontSize: 80 } }, step.emoji),
+        React.createElement(Text, { style: { color: textPrimary, fontWeight: '900', fontSize: 28, marginTop: 20, textAlign: 'center' } }, step.title),
+        React.createElement(Text, { style: { color: textSecondary, fontSize: 16, marginTop: 16, textAlign: 'center', lineHeight: 24 } }, step.description)
+      ),
+      React.createElement(View, {
+        style: {
+          paddingHorizontal: 20,
+          paddingBottom: insets.bottom + 20,
+          gap: 12
+        }
+      },
+        React.createElement(TouchableOpacity, {
+          style: {
+            backgroundColor: primaryColor,
+            borderRadius: 12,
+            padding: 16,
+            alignItems: 'center'
+          },
+          onPress: handleNext,
+          componentId: 'onboarding-next-btn'
+        },
+          React.createElement(Text, { style: { color: '#FFFFFF', fontWeight: '800', fontSize: 16 } }, currentStep === steps.length - 1 ? 'Get Started' : 'Next')
+        ),
+        React.createElement(View, { style: { flexDirection: 'row', justifyContent: 'center', gap: 6 } },
+          steps.map(function(_, idx) {
+            return React.createElement(View, {
+              key: idx,
+              style: {
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: idx === currentStep ? primaryColor : '#2A2A2A'
+              },
+              componentId: 'onboarding-dot-' + idx
+            });
+          })
+        )
+      )
+    );
+  };
+  // @end:OnboardingTutorial
+
+  // @section:HomeScreen-state @depends:[ThemeContext]
+var useHomeScreenState = function() {
+  var themeCtx = useTheme();
+  var theme = themeCtx.theme;
+  var authCtx = useAuth();
+  
+  var postsQuery = useQuery('posts', {}, { column: 'created_at_post', ascending: false });
+  
+  var showDailyState = useState(false);
+  var showDaily = showDailyState[0];
+  var setShowDaily = showDailyState[1];
+  
+  var dailyAnswerState = useState('');
+  var dailyAnswer = dailyAnswerState[0];
+  var setDailyAnswer = dailyAnswerState[1];
+  
+  var tipsShownState = useStorage('homeScreenTipsShown', false);
+  var tipsShown = tipsShownState[0];
+  var setTipsShown = tipsShownState[1];
+  
+  return {
+    theme: theme,
+    authCtx: authCtx,
+    postsQuery: postsQuery,
+    showDaily: showDaily,
+    setShowDaily: setShowDaily,
+    dailyAnswer: dailyAnswer,
+    setDailyAnswer: setDailyAnswer,
+    tipsShown: tipsShown,
+    setTipsShown: setTipsShown
+  };
+};
+// @end:HomeScreen-state
+
+  // @section:HomeScreen @depends:[HomeScreen-state,PostCard,DumbMeter,ContextualTip,seed-data,styles]
+var HomeScreen = function(props) {
+  var navigation = props.navigation;
+  var state = useHomeScreenState();
+  var insets = useSafeAreaInsets();
+  
+  var scrollBottomPadding = Platform.OS === 'web' ? WEB_TAB_MENU_PADDING : (TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING);
+  
+  var allPosts = useMemo(function() {
+    var dbPosts = (state.postsQuery.data && state.postsQuery.data.length > 0) ? state.postsQuery.data : [];
+    return dbPosts.sort(function(a, b) {
+      return new Date(b.created_at_post || 0) - new Date(a.created_at_post || 0);
+    });
+  }, [state.postsQuery.data]);
+  
+  var trendingPosts = useMemo(function() {
+    return allPosts.slice().sort(function(a, b) { return (b.dumb_score || 0) - (a.dumb_score || 0); }).slice(0, 3);
+  }, [allPosts]);
+  
+  var latestPosts = useMemo(function() {
+    return allPosts.slice(0, 10);
+  }, [allPosts]);
+  
+  useEffect(function() {
+    if (!state.tipsShown) {
+      setTimeout(function() { state.setTipsShown(true); }, 500);
+    }
+  }, [state.tipsShown]);
+  
+  var renderSectionHeader = function(emoji, title, color) {
+    return React.createElement(View, {
+      style: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, marginTop: 8 },
+      componentId: 'section-header-' + title
+    },
+      React.createElement(Text, { style: { fontSize: 18, marginRight: 8 } }, emoji),
+      React.createElement(Text, { style: { color: color || textPrimary, fontWeight: '800', fontSize: 17 } }, title),
+      React.createElement(View, { style: { flex: 1, height: 1, backgroundColor: '#2A2A2A', marginLeft: 12 } })
+    );
+  };
+  
+  return React.createElement(View, { style: { flex: 1, backgroundColor: backgroundColor } },
+    React.createElement(View, {
+      style: {
+        backgroundColor: backgroundColor,
+        paddingTop: insets.top + 8,
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#1A1A1A',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }
+    },
+      React.createElement(Text, { style: { color: primaryColor, fontWeight: '900', fontSize: 28, letterSpacing: -1 }, componentId: 'home-logo' }, 'DUMB'),
+      React.createElement(TouchableOpacity, {
+        onPress: function() {
+          if (state.authCtx.isAnonymous) {
+            Platform.OS === 'web'
+              ? window.alert('Sign up to post confessions!')
+              : Alert.alert('Sign Up Required', 'Create an account to post your confessions.');
+            navigation.navigate('Profile');
+          } else {
+            navigation.navigate('CreatePost');
+          }
+        },
+        style: {
+          backgroundColor: primaryColor,
+          borderRadius: 20,
+          paddingHorizontal: 16,
+          paddingVertical: 8,
+          flexDirection: 'row',
+          alignItems: 'center'
+        },
+        componentId: 'home-create-btn'
+      },
+        React.createElement(Ionicons, { name: 'add', size: 18, color: '#FFFFFF' }),
+        React.createElement(Text, { style: { color: '#FFFFFF', fontWeight: '700', fontSize: 13, marginLeft: 4 } }, 'Confess')
+      )
+    ),
+    React.createElement(ContextualTip, {
+      visible: state.tipsShown && !state.authCtx.isAnonymous,
+      text: 'Tap the Confess button to share your dumbest moment! 💡',
+      onDismiss: function() { state.setTipsShown(true); }
+    }),
+    React.createElement(ScrollView, {
+      style: { flex: 1 },
+      contentContainerStyle: { paddingTop: 8, paddingBottom: scrollBottomPadding },
+      showsVerticalScrollIndicator: false
+    },
+      React.createElement(TouchableOpacity, {
+        style: {
+          marginHorizontal: 16,
+          marginBottom: 12,
+          backgroundColor: '#1A1A1A',
+          borderRadius: 16,
+          padding: 16,
+          borderWidth: 1,
+          borderColor: '#F7931E40'
+        },
+        onPress: function() { state.setShowDaily(function(prev) { return !prev; }); },
+        componentId: 'daily-question-card'
+      },
+        React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 } },
+          React.createElement(Text, { style: { fontSize: 18, marginRight: 8 } }, '❓'),
+          React.createElement(Text, { style: { color: accentColor, fontWeight: '800', fontSize: 13, letterSpacing: 0.5 } }, 'DAILY DUMB QUESTION')
+        ),
+        React.createElement(Text, { style: { color: textPrimary, fontSize: 15, fontWeight: '600', lineHeight: 22 } }, DAILY_QUESTION),
+        state.showDaily ? React.createElement(View, { style: { marginTop: 12 } },
+          React.createElement(TextInput, {
+            style: {
+              backgroundColor: '#0F0F0F',
+              borderRadius: 12,
+              padding: 12,
+              color: textPrimary,
+              fontSize: 14,
+              borderWidth: 1,
+              borderColor: '#2A2A2A',
+              minHeight: 80,
+              textAlignVertical: 'top'
+            },
+            placeholder: 'Answer honestly... we dare you 😏',
+            placeholderTextColor: textSecondary,
+            value: state.dailyAnswer,
+            onChangeText: state.setDailyAnswer,
+            multiline: true,
+            numberOfLines: 3,
+            componentId: 'daily-answer-input'
+          }),
+          React.createElement(TouchableOpacity, {
+            style: {
+              backgroundColor: primaryColor,
+              borderRadius: 10,
+              padding: 12,
+              alignItems: 'center',
+              marginTop: 8
+            },
+            onPress: function() {
+              state.setShowDaily(false);
+              state.setDailyAnswer('');
+            },
+            componentId: 'daily-answer-submit'
+          },
+            React.createElement(Text, { style: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 } }, 'Share My Shame 🤦')
+          )
+        ) : null
+      ),
+      renderSectionHeader('🔥', 'Trending Dumb', '#FF6B35'),
+      trendingPosts.length === 0 ? React.createElement(View, {
+        style: {
+          alignItems: 'center',
+          paddingVertical: 40,
+          marginHorizontal: 16
+        }
+      },
+        React.createElement(Text, { style: { fontSize: 48 } }, '🌱'),
+        React.createElement(Text, { style: { color: textSecondary, fontSize: 14, marginTop: 12 } }, 'No posts yet. Be the first!')
+      ) : trendingPosts.map(function(post) {
+        return React.createElement(PostCard, {
+          key: post.id,
+          post: post,
+          onPress: function() { navigation.navigate('PostDetail', { postId: post.id, post: post }); },
+          componentId: 'trending-post-' + post.id
+        });
+      }),
+      renderSectionHeader('🤦', 'Latest Confessions', textPrimary),
+      latestPosts.length === 0 ? React.createElement(View, {
+        style: {
+          alignItems: 'center',
+          paddingVertical: 40,
+          marginHorizontal: 16
+        }
+      },
+        React.createElement(Text, { style: { fontSize: 48 } }, '🦗'),
+        React.createElement(Text, { style: { color: textSecondary, fontSize: 14, marginTop: 12 } }, 'Crickets... Share your story!')
+      ) : latestPosts.map(function(post) {
+        return React.createElement(PostCard, {
+          key: post.id + '-latest',
+          post: post,
+          onPress: function() { navigation.navigate('PostDetail', { postId: post.id, post: post }); },
+          componentId: 'latest-post-' + post.id
+        });
+      })
+    )
+  );
+};
+// @end:HomeScreen
+
+  // @section:FollowingFeedScreen @depends:[PostCard,seed-data,styles,ThemeContext]
+var FollowingFeedScreen = function(props) {
+  var navigation = props.navigation;
+  var authCtx = useAuth();
+  var themeCtx = useTheme();
+  var theme = themeCtx.theme;
+  var insets = useSafeAreaInsets();
+  
+  var scrollBottomPadding = Platform.OS === 'web' ? WEB_TAB_MENU_PADDING : (TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING);
+  
+  var followersQuery = useQuery('followers', {});
+  var postsQuery = useQuery('posts', {}, { column: 'created_at_post', ascending: false });
+  
+  var followingPosts = useMemo(function() {
+    if (authCtx.isAnonymous) return [];
+    
+    var followers = (followersQuery.data && followersQuery.data.length > 0) ? followersQuery.data : [];
+    var posts = (postsQuery.data && postsQuery.data.length > 0) ? postsQuery.data : [];
+    
+    var followingIds = followers
+      .filter(function(f) { return f.follower_id === authCtx.currentUser.id; })
+      .map(function(f) { return f.following_id; });
+    
+    var filtered = posts.filter(function(p) { return followingIds.indexOf(p.owner_id) !== -1; });
+    return filtered.slice(0, 20);
+  }, [followersQuery.data, postsQuery.data, authCtx.isAnonymous, authCtx.currentUser]);
+  
+  return React.createElement(View, { style: { flex: 1, backgroundColor: backgroundColor } },
+    React.createElement(View, {
+      style: {
+        paddingTop: insets.top + 8,
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+        backgroundColor: backgroundColor,
+        borderBottomWidth: 1,
+        borderBottomColor: '#1A1A1A',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }
+    },
+      React.createElement(Text, { style: { color: textPrimary, fontWeight: '900', fontSize: 22 }, componentId: 'following-title' }, '👥 Following'),
+      React.createElement(TouchableOpacity, {
+        style: {
+          backgroundColor: primaryColor + '20',
+          borderRadius: 8,
+          padding: 8
+        },
+        onPress: function() { navigation.navigate('Discover'); },
+        componentId: 'following-find-btn'
+      },
+        React.createElement(Ionicons, { name: 'add-circle-outline', size: 22, color: primaryColor })
+      )
+    ),
+    authCtx.isAnonymous ? React.createElement(View, {
+      style: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+      componentId: 'following-anon'
+    },
+      React.createElement(Text, { style: { fontSize: 48 } }, '🔐'),
+      React.createElement(Text, { style: { color: textPrimary, fontWeight: '700', fontSize: 18, marginTop: 12 } }, 'Sign In to Follow'),
+      React.createElement(Text, { style: { color: textSecondary, fontSize: 14, marginTop: 8, textAlign: 'center' } }, 'Create an account to follow people and see their posts here!')
+    ) : followingPosts.length === 0 ? React.createElement(View, {
+      style: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+      componentId: 'following-empty'
+    },
+      React.createElement(Text, { style: { fontSize: 48 } }, '👋'),
+      React.createElement(Text, { style: { color: textPrimary, fontWeight: '700', fontSize: 18, marginTop: 12 } }, 'No Following Feed Yet'),
+      React.createElement(Text, { style: { color: textSecondary, fontSize: 14, marginTop: 8, textAlign: 'center' } }, 'Follow people to see their dumbest confessions here!')
+    ) : React.createElement(ScrollView, {
+      style: { flex: 1 },
+      contentContainerStyle: { paddingTop: 8, paddingBottom: scrollBottomPadding },
+      showsVerticalScrollIndicator: false
+    },
+      followingPosts.map(function(post) {
+        return React.createElement(PostCard, {
+          key: post.id + '-following',
+          post: post,
+          onPress: function() { navigation.navigate('PostDetail', { postId: post.id, post: post }); },
+          componentId: 'following-post-' + post.id
+        });
+      })
+    )
+  );
+};
+// @end:FollowingFeedScreen
+
+  // @section:DiscoverScreen @depends:[PostCard,seed-data,styles,ThemeContext]
+var DiscoverScreen = function(props) {
+  var navigation = props.navigation;
+  var themeCtx = useTheme();
+  var theme = themeCtx.theme;
+  var insets = useSafeAreaInsets();
+  
+  var scrollBottomPadding = Platform.OS === 'web' ? WEB_TAB_MENU_PADDING : (TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING);
+  
+  var searchState = useState('');
+  var searchText = searchState[0];
+  var setSearchText = searchState[1];
+  
+  var postsQuery = useQuery('posts', {}, { column: 'dumb_score', ascending: false });
+  
+  var tipsShownState = useStorage('discoverScreenTipsShown', false);
+  var tipsShown = tipsShownState[0];
+  var setTipsShown = tipsShownState[1];
+  
+  var allPosts = useMemo(function() {
+    var dbPosts = (postsQuery.data && postsQuery.data.length > 0) ? postsQuery.data : [];
+    if (searchText.trim().length > 0) {
+      var lower = searchText.toLowerCase();
+      return dbPosts.filter(function(p) {
+        return (p.content && p.content.toLowerCase().indexOf(lower) !== -1) ||
+          (p.username && p.username.toLowerCase().indexOf(lower) !== -1) ||
+          (p.display_name && p.display_name.toLowerCase().indexOf(lower) !== -1);
+      });
+    }
+    return dbPosts;
+  }, [postsQuery.data, searchText]);
+  
+  var categories = [
+    { label: 'All', emoji: '🌍', filter: null },
+    { label: 'Legendary', emoji: '💀', filter: 90 },
+    { label: 'Certified', emoji: '🤦', filter: 70 },
+    { label: 'Questionable', emoji: '😬', filter: 40 },
+    { label: 'Normal', emoji: '😐', filter: 0 }
+  ];
+  
+  var activeCatState = useState(0);
+  var activeCat = activeCatState[0];
+  var setActiveCat = activeCatState[1];
+  
+  var filteredPosts = useMemo(function() {
+    var cat = categories[activeCat];
+    if (cat.filter === null) return allPosts;
+    return allPosts.filter(function(p) { return (p.dumb_score || 0) >= cat.filter; });
+  }, [allPosts, activeCat]);
+  
+  useEffect(function() {
+    if (!tipsShown) {
+      setTimeout(function() { setTipsShown(true); }, 500);
+    }
+  }, [tipsShown]);
+  
+  return React.createElement(View, { style: { flex: 1, backgroundColor: backgroundColor } },
+    React.createElement(View, {
+      style: {
+        paddingTop: insets.top + 8,
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+        backgroundColor: backgroundColor,
+        borderBottomWidth: 1,
+        borderBottomColor: '#1A1A1A'
+      }
+    },
+      React.createElement(Text, { style: { color: textPrimary, fontWeight: '900', fontSize: 22, marginBottom: 12 }, componentId: 'discover-title' }, 'Discover Dumb 🌍'),
+      React.createElement(View, {
+        style: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: cardColor,
+          borderRadius: 12,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          borderWidth: 1,
+          borderColor: '#2A2A2A',
+          marginBottom: 12
+        }
+      },
+        React.createElement(Ionicons, { name: 'search', size: 18, color: textSecondary }),
+        React.createElement(TextInput, {
+          style: { flex: 1, color: textPrimary, fontSize: 15, marginLeft: 8 },
+          placeholder: 'Search dumb confessions...',
+          placeholderTextColor: textSecondary,
+          value: searchText,
+          onChangeText: setSearchText,
+          autoCapitalize: 'none',
+          autoCorrect: false,
+          componentId: 'discover-search-input'
+        })
+      ),
+      React.createElement(ScrollView, { horizontal: true, showsHorizontalScrollIndicator: false, style: { flexGrow: 'initial' } },
+        categories.map(function(cat, idx) {
+          var isActive = idx === activeCat;
+          return React.createElement(TouchableOpacity, {
+            key: cat.label,
+            style: {
+              backgroundColor: isActive ? primaryColor : cardColor,
+              borderRadius: 20,
+              paddingHorizontal: 14,
+              paddingVertical: 7,
+              marginRight: 8,
+              borderWidth: 1,
+              borderColor: isActive ? primaryColor : '#2A2A2A'
+            },
+            onPress: function() { setActiveCat(idx); },
+            componentId: 'discover-cat-' + cat.label
+          },
+            React.createElement(Text, { style: { color: isActive ? '#FFFFFF' : textSecondary, fontWeight: '700', fontSize: 13 } },
+              cat.emoji + ' ' + cat.label
+            )
+          );
+        })
+      )
+    ),
+    React.createElement(ContextualTip, {
+      visible: tipsShown,
+      text: 'Filter by DUMB level or search for specific confessions! 🔍',
+      onDismiss: function() { setTipsShown(true); }
+    }),
+    React.createElement(ScrollView, {
+      style: { flex: 1 },
+      contentContainerStyle: { paddingTop: 8, paddingBottom: scrollBottomPadding },
+      showsVerticalScrollIndicator: false
+    },
+      filteredPosts.length === 0
+        ? React.createElement(View, { style: { alignItems: 'center', paddingTop: 60 }, componentId: 'discover-empty' },
+          React.createElement(Text, { style: { fontSize: 48 } }, '🔍'),
+          React.createElement(Text, { style: { color: textPrimary, fontWeight: '700', fontSize: 18, marginTop: 12 } }, 'No Dumb Found'),
+          React.createElement(Text, { style: { color: textSecondary, fontSize: 14, marginTop: 6 } }, 'Try a different search term')
+        )
+        : filteredPosts.map(function(post) {
+          return React.createElement(PostCard, {
+            key: post.id + '-discover',
+            post: post,
+            onPress: function() { navigation.navigate('PostDetail', { postId: post.id, post: post }); },
+            componentId: 'discover-post-' + post.id
+          });
+        })
+    )
+  );
+};
+// @end:DiscoverScreen
+
+  // @section:CreatePostScreen @depends:[DumbMeter,dumb-score-utils,theme,ThemeContext]
+var CreatePostScreen = function(props) {
+  var navigation = props.navigation;
+  var authCtx = useAuth();
+  var themeCtx = useTheme();
+  var theme = themeCtx.theme;
+  var insets = useSafeAreaInsets();
+  
+  var mutPost = useMutation('posts', 'insert');
+  var insertPost = mutPost.mutate;
+  
+  var cameraHook = useCamera();
+  var takePhoto = cameraHook.takePhoto;
+  var pickImage = cameraHook.pickImage;
+  var cameraPhoto = cameraHook.photo;
+  
+  var contentState = useState('');
+  var content = contentState[0];
+  var setContent = contentState[1];
+  
+  var submittingState = useState(false);
+  var submitting = submittingState[0];
+  var setSubmitting = submittingState[1];
+  
+  var dumbResult = useMemo(function() {
+    return calculateDumbScore(content);
+  }, [content]);
+  
+  var examplePosts = [
+    '🔍 "I looked for my phone while holding it..."',
+    '🧊 "I opened the fridge and forgot why."',
+    '📝 "Submitted assignment, immediately saw the huge mistake."'
+  ];
+  
+  var handlePublish = function() {
+    if (!content.trim()) {
+      Platform.OS === 'web'
+        ? window.alert('Write something dumb first! 🤦')
+        : Alert.alert('Empty!', 'Write something dumb first! 🤦');
+      return;
+    }
+    
+    if (!authCtx.currentUser || !authCtx.currentProfile) {
+      Platform.OS === 'web'
+        ? window.alert('You must be logged in to post.')
+        : Alert.alert('Not Logged In', 'You must be logged in to post.');
+      return;
+    }
+    
+    setSubmitting(true);
+    var postData = {
+      id: 'post-' + Date.now(),
+      content: content.trim(),
+      dumb_score: dumbResult.score,
+      dumb_title: dumbResult.title,
+      dumb_emoji: dumbResult.emoji,
+      owner_id: authCtx.currentUser.id,
+      username: authCtx.currentProfile.username,
+      display_name: authCtx.currentProfile.display_name,
+      avatar_url: authCtx.currentProfile.avatar_url || null,
+      likes_count: 0,
+      comments_count: 0,
+      image_url: cameraPhoto ? cameraPhoto.uri : null,
+      visibility: 'public',
+      created_at_post: new Date().toISOString()
+    };
+    
+    insertPost(postData).then(function() {
+      setSubmitting(false);
+      setContent('');
+      Platform.OS === 'web'
+        ? window.alert('Confession published! Your DUMB score: ' + dumbResult.score + '/100 ' + dumbResult.emoji)
+        : Alert.alert('Confession Published! ' + dumbResult.emoji, 'DUMB Score: ' + dumbResult.score + '/100\n' + dumbResult.title);
+      navigation.goBack();
+    }).catch(function(err) {
+      setSubmitting(false);
+      Platform.OS === 'web'
+        ? window.alert('Failed to publish. Try again.')
+        : Alert.alert('Error', 'Failed to publish. Try again.');
+    });
+  };
+  
+  var handleCamera = function() {
+    takePhoto().then(function(result) {
+      if (result.error) {
+        Platform.OS === 'web' ? window.alert(result.error) : Alert.alert('Camera Error', result.error);
+      }
+    });
+  };
+  
+  var handleGallery = function() {
+    pickImage({ allowsEditing: true }).then(function(result) {
+      if (result.error) {
+        Platform.OS === 'web' ? window.alert(result.error) : Alert.alert('Gallery Error', result.error);
+      }
+    });
+  };
+  
+  var scrollHeight = Dimensions.get('window').height - insets.top - insets.bottom;
+  
+  return React.createElement(View, { style: { flex: 1, backgroundColor: backgroundColor } },
+    React.createElement(View, {
+      style: {
+        paddingTop: insets.top + 8,
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+        backgroundColor: backgroundColor,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderBottomWidth: 1,
+        borderBottomColor: '#1A1A1A'
+      }
+    },
+      React.createElement(TouchableOpacity, {
+        onPress: function() { navigation.goBack(); },
+        style: { padding: 4 },
+        componentId: 'create-back-btn'
+      },
+        React.createElement(Ionicons, { name: 'close', size: 26, color: textSecondary })
+      ),
+      React.createElement(Text, { style: { color: textPrimary, fontWeight: '900', fontSize: 18 } }, 'Confess Your Dumb'),
+      React.createElement(TouchableOpacity, {
+        style: {
+          backgroundColor: content.trim() ? primaryColor : '#333',
+          borderRadius: 20,
+          paddingHorizontal: 16,
+          paddingVertical: 8
+        },
+        onPress: submitting ? null : (content.trim().length >= 10 ? handlePublish : function() {}),
+        componentId: 'create-publish-btn'
+      },
+        submitting
+          ? React.createElement(ActivityIndicator, { size: 'small', color: '#FFFFFF' })
+          : React.createElement(Text, { style: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 } }, 'Publish 🤦')
+      )
+    ),
+    React.createElement(KeyboardAvoidingView, {
+      style: { flex: 1 },
+      behavior: Platform.OS === 'ios' ? 'padding' : (Platform.OS === 'web' ? undefined : 'height')
+    },
+      React.createElement(ScrollView, {
+        style: Platform.OS === 'web' ? { height: scrollHeight, overflow: 'auto' } : { flex: 1 },
+        contentContainerStyle: { paddingBottom: 40 },
+        keyboardShouldPersistTaps: 'handled'
+      },
+        React.createElement(TextInput, {
+          style: {
+            color: textPrimary,
+            fontSize: 17,
+            lineHeight: 26,
+            padding: 16,
+            minHeight: 150,
+            textAlignVertical: 'top',
+            fontWeight: '400'
+          },
+          placeholder: 'What dumb thing happened today? 🤦',
+          placeholderTextColor: '#555',
+          value: content,
+          onChangeText: setContent,
+          multiline: true,
+          autoCapitalize: 'sentences',
+          autoCorrect: true,
+          componentId: 'create-content-input'
+        }),
+        content.length === 0 ? React.createElement(View, { style: { paddingHorizontal: 16, marginBottom: 12 } },
+          React.createElement(Text, { style: { color: '#444', fontSize: 13, marginBottom: 8, fontWeight: '600' } }, 'Examples:'),
+          examplePosts.map(function(ex, i) {
+            return React.createElement(TouchableOpacity, {
+              key: i,
+              onPress: function() { setContent(ex.replace(/^[^ ]+ /, '').replace(/"/g, '')); },
+              style: { marginBottom: 6 },
+              componentId: 'example-' + i
+            },
+              React.createElement(Text, { style: { color: '#555', fontSize: 13, lineHeight: 20 } }, ex)
+            );
+          })
+        ) : null,
+        cameraPhoto ? React.createElement(View, { style: { marginHorizontal: 16, marginBottom: 12 } },
+          React.createElement(Image, {
+            source: { uri: cameraPhoto.uri },
+            style: { width: '100%', height: 200, borderRadius: 12, backgroundColor: '#1A1A1A' },
+            resizeMode: 'cover'
+          })
+        ) : null,
+        React.createElement(View, { style: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 16 } },
+          React.createElement(TouchableOpacity, {
+            style: {
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: cardColor,
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              marginRight: 8,
+              borderWidth: 1,
+              borderColor: '#2A2A2A'
+            },
+            onPress: handleCamera,
+            componentId: 'create-camera-btn'
+          },
+            React.createElement(Ionicons, { name: 'camera-outline', size: 18, color: accentColor }),
+            React.createElement(Text, { style: { color: accentColor, fontSize: 13, fontWeight: '600', marginLeft: 4 } }, 'Camera')
+          ),
+          React.createElement(TouchableOpacity, {
+            style: {
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: cardColor,
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderWidth: 1,
+              borderColor: '#2A2A2A'
+            },
+            onPress: handleGallery,
+            componentId: 'create-gallery-btn'
+          },
+            React.createElement(Ionicons, { name: 'image-outline', size: 18, color: accentColor }),
+            React.createElement(Text, { style: { color: accentColor, fontSize: 13, fontWeight: '600', marginLeft: 4 } }, 'Gallery')
+          )
+        ),
+        content.trim().length > 0 ? React.createElement(View, { style: { paddingHorizontal: 16 } },
+          React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
+            React.createElement(Text, { style: { color: textSecondary, fontSize: 13, fontWeight: '600' } }, 'Live DUMB-O-METER™'),
+            React.createElement(Text, { style: { color: textSecondary, fontSize: 12 } }, content.length + ' chars')
+          ),
+          React.createElement(DumbMeter, {
+            score: dumbResult.score,
+            title: dumbResult.title,
+            emoji: dumbResult.emoji,
+            compact: false
+          })
+        ) : React.createElement(View, {
+          style: {
+            marginHorizontal: 16,
+            backgroundColor: '#1A1A1A',
+            borderRadius: 16,
+            padding: 20,
+            alignItems: 'center',
+            borderWidth: 1,
+            borderColor: '#2A2A2A',
+            borderStyle: 'dashed'
+          },
+          componentId: 'meter-placeholder'
+        },
+          React.createElement(Text, { style: { fontSize: 32 } }, '🎯'),
+          React.createElement(Text, { style: { color: textSecondary, fontWeight: '700', fontSize: 14, marginTop: 8 } }, 'DUMB-O-METER™ Ready'),
+          React.createElement(Text, { style: { color: '#555', fontSize: 12, marginTop: 4, textAlign: 'center' } }, 'Start typing to calculate your dumb score in real-time')
+        )
+      )
+    )
+  );
+};
+// @end:CreatePostScreen
+
+  // @section:LeaderboardScreen @depends:[DumbMeter,dumb-score-utils,seed-data,theme,ThemeContext,ContextualTip]
+var LeaderboardScreen = function(props) {
+  var navigation = props.navigation;
+  var themeCtx = useTheme();
+  var theme = themeCtx.theme;
+  var insets = useSafeAreaInsets();
+  
+  var scrollBottomPadding = Platform.OS === 'web' ? WEB_TAB_MENU_PADDING : (TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING);
+  
+  var postsQuery = useQuery('posts', {}, { column: 'dumb_score', ascending: false });
+  
+  var tipsShownState = useStorage('leaderboardScreenTipsShown', false);
+  var tipsShown = tipsShownState[0];
+  var setTipsShown = tipsShownState[1];
+  
+  var tabState = useState(0);
+  var activeTab = tabState[0];
+  var setActiveTab = tabState[1];
+  
+  var tabs = ['Dumbest Today', 'This Week', 'Hall of Shame'];
+  
+  var allPosts = useMemo(function() {
+    var dbPosts = (postsQuery.data && postsQuery.data.length > 0) ? postsQuery.data : [];
+    return dbPosts.sort(function(a, b) { return (b.dumb_score || 0) - (a.dumb_score || 0); });
+  }, [postsQuery.data]);
+  
+  var getRankEmoji = function(idx) {
+    if (idx === 0) return '🥇';
+    if (idx === 1) return '🥈';
+    if (idx === 2) return '🥉';
+    return '#' + (idx + 1);
+  };
+  
+  var getRankColor = function(idx) {
+    if (idx === 0) return '#FFD700';
+    if (idx === 1) return '#C0C0C0';
+    if (idx === 2) return '#CD7F32';
+    return textSecondary;
+  };
+  
+  useEffect(function() {
+    if (!tipsShown) {
+      setTimeout(function() { setTipsShown(true); }, 500);
+    }
+  }, [tipsShown]);
+  
+  return React.createElement(View, { style: { flex: 1, backgroundColor: backgroundColor } },
+    React.createElement(View, {
+      style: {
+        paddingTop: insets.top + 8,
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+        backgroundColor: backgroundColor,
+        borderBottomWidth: 1,
+        borderBottomColor: '#1A1A1A'
+      }
+    },
+      React.createElement(Text, { style: { color: textPrimary, fontWeight: '900', fontSize: 22, marginBottom: 12 }, componentId: 'leaderboard-title' }, '🏆 Leaderboard'),
+      React.createElement(View, { style: { flexDirection: 'row', backgroundColor: '#1A1A1A', borderRadius: 12, padding: 3 } },
+        tabs.map(function(tab, idx) {
+          return React.createElement(TouchableOpacity, {
+            key: tab,
+            style: {
+              flex: 1,
+              backgroundColor: idx === activeTab ? primaryColor : 'transparent',
+              borderRadius: 10,
+              paddingVertical: 8,
+              alignItems: 'center'
+            },
+            onPress: function() { setActiveTab(idx); },
+            componentId: 'leaderboard-tab-' + idx
+          },
+            React.createElement(Text, { style: { color: idx === activeTab ? '#FFFFFF' : textSecondary, fontWeight: '700', fontSize: 11 } }, tab)
+          );
+        })
+      )
+    ),
+    React.createElement(ScrollView, {
+      style: { flex: 1 },
+      contentContainerStyle: { paddingTop: 12, paddingBottom: scrollBottomPadding },
+      showsVerticalScrollIndicator: false
+    },
+      allPosts.length === 0
+        ? React.createElement(View, { style: { alignItems: 'center', paddingTop: 60 }, componentId: 'leaderboard-empty' },
+          React.createElement(Text, { style: { fontSize: 48 } }, '📊'),
+          React.createElement(Text, { style: { color: textPrimary, fontWeight: '700', fontSize: 18, marginTop: 12 } }, 'No Posts Yet'),
+          React.createElement(Text, { style: { color: textSecondary, fontSize: 14, marginTop: 6 } }, 'Start confessing to climb the leaderboard!')
+        )
+        : allPosts.slice(0, 20).map(function(post, idx) {
+          var dumbColor = getDumbColor(post.dumb_score || 0);
+          var rankEmoji = getRankEmoji(idx);
+          var rankColor = getRankColor(idx);
+          var avatarLetter = (post.display_name || post.username || 'U').charAt(0).toUpperCase();
+          return React.createElement(TouchableOpacity, {
+            key: post.id + '-lb-' + idx,
+            style: {
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: idx < 3 ? cardColor : '#111',
+              marginHorizontal: 16,
+              marginVertical: 4,
+              borderRadius: 14,
+              padding: 14,
+              borderWidth: idx < 3 ? 1 : 0,
+              borderColor: idx < 3 ? dumbColor + '40' : 'transparent'
+            },
+            onPress: function() { navigation.navigate('PostDetail', { postId: post.id, post: post }); },
+            componentId: 'leaderboard-item-' + idx
+          },
+            React.createElement(View, { style: { width: 36, alignItems: 'center' } },
+              React.createElement(Text, { style: { color: rankColor, fontWeight: '900', fontSize: idx < 3 ? 22 : 14 } }, rankEmoji)
+            ),
+            React.createElement(View, {
+              style: {
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: dumbColor + '25',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginHorizontal: 10,
+                borderWidth: 1,
+                borderColor: dumbColor + '50'
+              }
+            },
+              React.createElement(Text, { style: { color: dumbColor, fontWeight: '800', fontSize: 16 } }, avatarLetter)
+            ),
+            React.createElement(View, { style: { flex: 1 } },
+              React.createElement(Text, { style: { color: textPrimary, fontWeight: '700', fontSize: 13 } }, post.display_name || post.username || 'Anonymous'),
+              React.createElement(Text, { style: { color: textSecondary, fontSize: 12, marginTop: 2 } }, (post.content || '').substring(0, 50) + (post.content && post.content.length > 50 ? '...' : ''))
+            ),
+            React.createElement(View, { style: { alignItems: 'flex-end' } },
+              React.createElement(Text, { style: { color: dumbColor, fontWeight: '900', fontSize: 20 } }, (post.dumb_score || 0).toString()),
+              React.createElement(Text, { style: { color: dumbColor, fontSize: 9, fontWeight: '600' } }, (post.dumb_emoji || '😐')),
+              React.createElement(Text, { style: { color: textSecondary, fontSize: 9, marginTop: 2 } }, '/100')
+            )
+          );
+        })
+    )
+  );
+};
+// @end:LeaderboardScreen
+
+  // @section:ProfileScreen @depends:[DumbMeter,dumb-score-utils,seed-data,theme,ThemeContext,ContextualTip]
+var ProfileScreen = function(props) {
+  var navigation = props.navigation;
+  var route = props.route;
+  var routeUserId = route && route.params ? route.params.userId : null;
+  
+  var authCtx = useAuth();
+  var themeCtx = useTheme();
+  var theme = themeCtx.theme;
+  var insets = useSafeAreaInsets();
+  
+  var scrollBottomPadding = Platform.OS === 'web' ? WEB_TAB_MENU_PADDING : (TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING);
+  
+  var postsQuery = useQuery('posts', {}, { column: 'created_at_post', ascending: false });
+  var followersQuery = useQuery('followers', {});
+  var profilesQuery = useQuery('profiles', {});
+  
+  var followMut = useMutation('followers', 'insert');
+  var unfollowMut = useMutation('followers', 'delete');
+  
+  var notifHook = usePushNotifications();
+  var isSupported = notifHook.isSupported;
+  var permission = notifHook.permission;
+  var requestPermission = notifHook.requestPermission;
+  
+  var tipsShownState = useStorage('profileScreenTipsShown', false);
+  var tipsShown = tipsShownState[0];
+  var setTipsShown = tipsShownState[1];
+  
+  var isOtherUserProfile = routeUserId && routeUserId !== (authCtx.currentUser ? authCtx.currentUser.id : null);
+  var profileUserId = routeUserId || (authCtx.currentUser ? authCtx.currentUser.id : null);
+  
+  var viewingProfile = useMemo(function() {
+    if (!profileUserId) return null;
+    var profiles = profilesQuery.data || [];
+    return profiles.find(function(p) { return p.owner_id === profileUserId; }) || null;
+  }, [profilesQuery.data, profileUserId]);
+  
+  var myPosts = useMemo(function() {
+    var dbPosts = (postsQuery.data && postsQuery.data.length > 0) ? postsQuery.data : [];
+    return dbPosts.filter(function(p) { return p.owner_id === profileUserId; });
+  }, [postsQuery.data, profileUserId]);
+  
+  var myStats = useMemo(function() {
+    var totalPosts = myPosts.length;
+    var scores = myPosts.map(function(p) { return p.dumb_score || 0; });
+    var avgScore = scores.length > 0 ? Math.round(scores.reduce(function(a, b) { return a + b; }, 0) / scores.length) : 0;
+    var highestScore = scores.length > 0 ? Math.max.apply(null, scores) : 0;
+    return { totalPosts: totalPosts, avgScore: avgScore, highestScore: highestScore };
+  }, [myPosts]);
+  
+  var earnedBadges = useMemo(function() {
+    var badges = [];
+    if (myStats.totalPosts >= 1) badges.push('first_dumb');
+    if (myStats.highestScore >= 70) badges.push('certified_dumb');
+    if (myStats.highestScore >= 90) badges.push('legendary_dumb');
+    if (myStats.totalPosts >= 5 && myStats.avgScore >= 60) badges.push('professional_mistake');
+    if (myStats.totalPosts >= 10) badges.push('brain_on_vacation');
+    return badges;
+  }, [myStats]);
+  
+  var followersCount = useMemo(function() {
+    var followers = (followersQuery.data && followersQuery.data.length > 0) ? followersQuery.data : [];
+    return followers.filter(function(f) { return f.following_id === profileUserId; }).length;
+  }, [followersQuery.data, profileUserId]);
+  
+  var followingCount = useMemo(function() {
+    var followers = (followersQuery.data && followersQuery.data.length > 0) ? followersQuery.data : [];
+    return followers.filter(function(f) { return f.follower_id === profileUserId; }).length;
+  }, [followersQuery.data, profileUserId]);
+  
+  var isFollowing = useMemo(function() {
+    if (authCtx.isAnonymous) return false;
+    var followers = (followersQuery.data && followersQuery.data.length > 0) ? followersQuery.data : [];
+    return followers.some(function(f) { return f.follower_id === authCtx.currentUser.id && f.following_id === profileUserId; });
+  }, [followersQuery.data, authCtx.isAnonymous, authCtx.currentUser, profileUserId]);
+  
+  var handleFollow = function() {
+    if (authCtx.isAnonymous) {
+      Platform.OS === 'web'
+        ? window.alert('Sign up to follow people!')
+        : Alert.alert('Sign Up Required', 'Create an account to follow people.');
+      return;
+    }
+    
+    if (isFollowing) {
+      unfollowMut.mutate({ follower_id: authCtx.currentUser.id, following_id: profileUserId }).then(function() {
+        followersQuery.refetch();
+      });
+    } else {
+      followMut.mutate({ follower_id: authCtx.currentUser.id, following_id: profileUserId }).then(function() {
+        followersQuery.refetch();
+      });
+    }
+  };
+  
+  var handleNotifPress = function() {
+    if (!isSupported) {
+      Platform.OS === 'web' ? window.alert('Push notifications require the native app.') : null;
+      return;
+    }
+    if (permission === 'granted') {
+      Platform.OS === 'web' ? window.alert('Notifications already enabled! 🔔') : Alert.alert('Enabled', 'Notifications already enabled!');
+      return;
+    }
+    requestPermission().then(function(granted) {
+      if (!granted) {
+        Platform.OS === 'web'
+          ? window.alert('Please enable notifications in Settings.')
+          : Alert.alert('Not Granted', 'You can enable notifications in Settings.');
+      } else {
+        Platform.OS === 'web'
+          ? window.alert('Notifications enabled! 🔔')
+          : Alert.alert('Enabled! 🔔', 'You will be notified of new reactions and comments!');
+      }
+    });
+  };
+  
+  var handleLogout = function() {
+    Platform.OS === 'web'
+      ? (window.confirm('Log out?') ? authCtx.logout() : null)
+      : Alert.alert('Log Out?', 'Are you sure?', [
+        { text: 'Cancel', onPress: function() {} },
+        { text: 'Log Out', onPress: function() { authCtx.logout(); }, style: 'destructive' }
+      ]);
+  };
+  
+  var renderStatBox = function(label, value, color) {
+    return React.createElement(View, {
+      style: {
+        flex: 1,
+        backgroundColor: '#111',
+        borderRadius: 12,
+        padding: 12,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: (color || '#2A2A2A') + '50'
+      }
+    },
+      React.createElement(Text, { style: { color: color || textPrimary, fontWeight: '900', fontSize: 24 } }, value.toString()),
+      React.createElement(Text, { style: { color: textSecondary, fontSize: 11, marginTop: 4, textAlign: 'center' } }, label)
+    );
+  };
+  
+  var profileDisplayName = viewingProfile ? viewingProfile.display_name : 'Profile';
+  var profileUsername = viewingProfile ? viewingProfile.username : 'user';
+  
+  useEffect(function() {
+    if (!tipsShown && !isOtherUserProfile && !authCtx.isAnonymous) {
+      setTimeout(function() { setTipsShown(true); }, 500);
+    }
+  }, [tipsShown, isOtherUserProfile, authCtx.isAnonymous]);
+  
+  if (authCtx.isAnonymous && !isOtherUserProfile) {
+    return React.createElement(View, { style: { flex: 1, backgroundColor: backgroundColor } },
+      React.createElement(View, {
+        style: {
+          paddingTop: insets.top + 8,
+          paddingHorizontal: 16,
+          paddingBottom: 12,
+          backgroundColor: backgroundColor,
+          borderBottomWidth: 1,
+          borderBottomColor: '#1A1A1A'
+        }
+      },
+        React.createElement(Text, { style: { color: textPrimary, fontWeight: '900', fontSize: 22 }, componentId: 'profile-title' }, '👤 Profile')
+      ),
+      React.createElement(ScrollView, {
+        style: { flex: 1 },
+        contentContainerStyle: { paddingTop: 0, paddingBottom: scrollBottomPadding },
+        showsVerticalScrollIndicator: false
+      },
+        React.createElement(View, {
+          style: {
+            backgroundColor: cardColor,
+            paddingHorizontal: 16,
+            paddingVertical: 40,
+            alignItems: 'center',
+            borderBottomWidth: 1,
+            borderBottomColor: '#2A2A2A'
+          }
+        },
+          React.createElement(Text, { style: { fontSize: 64 } }, '🔐'),
+          React.createElement(Text, { style: { color: textPrimary, fontWeight: '900', fontSize: 20, marginTop: 12 } }, 'Sign In to Your Profile'),
+          React.createElement(Text, { style: { color: textSecondary, fontSize: 14, marginTop: 8, textAlign: 'center' } }, 'Create an account to post confessions, follow people, and earn badges!')
+        ),
+        React.createElement(View, { style: { paddingHorizontal: 16, paddingVertical: 20, gap: 12 } },
+          React.createElement(TouchableOpacity, {
+            style: {
+              backgroundColor: primaryColor,
+              borderRadius: 12,
+              padding: 16,
+              alignItems: 'center'
+            },
+            onPress: function() { navigation.navigate('SignUp'); },
+            componentId: 'profile-signup-btn'
+          },
+            React.createElement(Text, { style: { color: '#FFFFFF', fontWeight: '800', fontSize: 16 } }, 'Create Account')
+          ),
+          React.createElement(TouchableOpacity, {
+            style: {
+              backgroundColor: cardColor,
+              borderRadius: 12,
+              padding: 16,
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: '#2A2A2A'
+            },
+            onPress: function() { navigation.navigate('Login'); },
+            componentId: 'profile-login-btn'
+          },
+            React.createElement(Text, { style: { color: textPrimary, fontWeight: '800', fontSize: 16 } }, 'Log In')
+          )
+        )
+      )
+    );
+  }
+  
+  return React.createElement(View, { style: { flex: 1, backgroundColor: backgroundColor } },
+    React.createElement(View, {
+      style: {
+        paddingTop: insets.top + 8,
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+        backgroundColor: backgroundColor,
+        borderBottomWidth: 1,
+        borderBottomColor: '#1A1A1A',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }
+    },
+      React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center' } },
+        isOtherUserProfile ? React.createElement(TouchableOpacity, {
+          onPress: function() { navigation.goBack(); },
+          style: { marginRight: 12 },
+          componentId: 'profile-back-btn'
+        },
+          React.createElement(Ionicons, { name: 'arrow-back', size: 24, color: textSecondary })
+        ) : null,
+        React.createElement(Text, { style: { color: textPrimary, fontWeight: '900', fontSize: 22 }, componentId: 'profile-title' }, '👤 ' + (isOtherUserProfile ? profileDisplayName : 'You'))
+      ),
+      !isOtherUserProfile ? React.createElement(TouchableOpacity, {
+        style: {
+          backgroundColor: isSupported && permission === 'granted' ? '#1A3A1A' : cardColor,
+          borderRadius: 20,
+          paddingHorizontal: 14,
+          paddingVertical: 8,
+          borderWidth: 1,
+          borderColor: isSupported && permission === 'granted' ? '#10B981' : '#2A2A2A'
+        },
+        onPress: handleNotifPress,
+        componentId: 'profile-notif-btn'
+      },
+        React.createElement(Ionicons, {
+          name: isSupported && permission === 'granted' ? 'notifications' : 'notifications-outline',
+          size: 20,
+          color: isSupported && permission === 'granted' ? '#10B981' : textSecondary
+        })
+      ) : null
+    ),
+    React.createElement(ContextualTip, {
+      visible: tipsShown && !isOtherUserProfile,
+      text: 'Your profile shows your DUMB stats and badges! 🏅',
+      onDismiss: function() { setTipsShown(true); }
+    }),
+    React.createElement(ScrollView, {
+      style: { flex: 1 },
+      contentContainerStyle: { paddingTop: 0, paddingBottom: scrollBottomPadding },
+      showsVerticalScrollIndicator: false
+    },
+      React.createElement(View, {
+        style: {
+          backgroundColor: cardColor,
+          paddingHorizontal: 16,
+          paddingVertical: 24,
+          alignItems: 'center',
+          borderBottomWidth: 1,
+          borderBottomColor: '#2A2A2A'
+        }
+      },
+        React.createElement(View, {
+          style: {
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+            backgroundColor: primaryColor + '30',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: 3,
+            borderColor: primaryColor,
+            marginBottom: 12
+          }
+        },
+          React.createElement(Text, { style: { color: primaryColor, fontWeight: '900', fontSize: 32 } }, (profileDisplayName || 'U').charAt(0).toUpperCase())
+        ),
+        React.createElement(Text, { style: { color: textPrimary, fontWeight: '900', fontSize: 20 } }, profileDisplayName),
+        React.createElement(Text, { style: { color: textSecondary, fontSize: 14, marginTop: 4 } }, '@' + profileUsername + ' · Certified Dumb'),
+        isOtherUserProfile ? React.createElement(TouchableOpacity, {
+          style: {
+            marginTop: 12,
+            backgroundColor: isFollowing ? '#1A1A1A' : primaryColor,
+            borderRadius: 20,
+            paddingHorizontal: 24,
+            paddingVertical: 8,
+            borderWidth: 1,
+            borderColor: isFollowing ? '#2A2A2A' : primaryColor
+          },
+          onPress: handleFollow,
+          componentId: 'profile-follow-btn'
+        },
+          React.createElement(Text, { style: { color: isFollowing ? textSecondary : '#FFFFFF', fontWeight: '800', fontSize: 13 } }, isFollowing ? 'Following' : 'Follow')
+        ) : null
+      ),
+      React.createElement(View, { style: { flexDirection: 'row', padding: 16, gap: 10 } },
+        renderStatBox('Posts', myStats.totalPosts, primaryColor),
+        React.createElement(View, { style: { width: 8 } }),
+        renderStatBox('Followers', followersCount, accentColor),
+        React.createElement(View, { style: { width: 8 } }),
+        renderStatBox('Following', followingCount, '#FF2D55')
+      ),
+      !isOtherUserProfile ? React.createElement(View, { style: { paddingHorizontal: 16, marginBottom: 16 } },
+        React.createElement(Text, { style: { color: textPrimary, fontWeight: '800', fontSize: 16, marginBottom: 12 } }, '🏅 Badges'),
+        earnedBadges.length === 0
+          ? React.createElement(View, {
+            style: {
+              backgroundColor: cardColor,
+              borderRadius: 12,
+              padding: 16,
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: '#2A2A2A'
+            },
+            componentId: 'profile-badges-empty'
+          },
+            React.createElement(Text, { style: { fontSize: 32 } }, '🎯'),
+            React.createElement(Text, { style: { color: textSecondary, fontSize: 13, marginTop: 8 } }, 'Post your first dumb confession to earn badges!')
+          )
+          : React.createElement(View, { style: { flexDirection: 'row', flexWrap: 'wrap' } },
+            earnedBadges.map(function(badgeKey) {
+              var badge = BADGES_CONFIG[badgeKey];
+              if (!badge) return null;
+              return React.createElement(View, {
+                key: badgeKey,
+                style: {
+                  backgroundColor: badge.color + '20',
+                  borderRadius: 12,
+                  padding: 12,
+                  marginRight: 8,
+                  marginBottom: 8,
+                  borderWidth: 1,
+                  borderColor: badge.color + '50',
+                  width: (SCREEN_WIDTH - 56) / 2
+                }
+              },
+                React.createElement(Text, { style: { fontSize: 28 } }, badge.emoji),
+                React.createElement(Text, { style: { color: badge.color, fontWeight: '800', fontSize: 13, marginTop: 4 } }, badge.label),
+                React.createElement(Text, { style: { color: textSecondary, fontSize: 11, marginTop: 2 } }, badge.description)
+              );
+            })
+          )
+      ) : null,
+      !isOtherUserProfile ? React.createElement(View, { style: { paddingHorizontal: 16, marginBottom: 8 } },
+        React.createElement(Text, { style: { color: textPrimary, fontWeight: '800', fontSize: 16, marginBottom: 8 } }, '📝 All Badges'),
+        Object.keys(BADGES_CONFIG).map(function(badgeKey) {
+          var badge = BADGES_CONFIG[badgeKey];
+          var earned = earnedBadges.indexOf(badgeKey) !== -1;
+          return React.createElement(View, {
+            key: badgeKey,
+            style: {
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: earned ? badge.color + '15' : '#111',
+              borderRadius: 12,
+              padding: 14,
+              marginBottom: 8,
+              borderWidth: 1,
+              borderColor: earned ? badge.color + '50' : '#1A1A1A',
+              opacity: earned ? 1 : 0.5
+            }
+          },
+            React.createElement(Text, { style: { fontSize: 28, marginRight: 12 } }, badge.emoji),
+            React.createElement(View, { style: { flex: 1 } },
+              React.createElement(Text, { style: { color: earned ? badge.color : textSecondary, fontWeight: '800', fontSize: 14 } }, badge.label),
+              React.createElement(Text, { style: { color: textSecondary, fontSize: 12, marginTop: 2 } }, badge.description)
+            ),
+            earned
+              ? React.createElement(Ionicons, { name: 'checkmark-circle', size: 22, color: badge.color })
+              : React.createElement(Ionicons, { name: 'lock-closed', size: 18, color: '#333' })
+          );
+        })
+      ) : null,
+      myPosts.length > 0 ? React.createElement(View, { style: { paddingHorizontal: 16, marginBottom: 8 } },
+        React.createElement(Text, { style: { color: textPrimary, fontWeight: '800', fontSize: 16, marginBottom: 8 } }, isOtherUserProfile ? '🤦 ' + profileDisplayName + "'s Posts" : '🤦 My Confessions'),
+        myPosts.slice(0, 5).map(function(post) {
+          var dumbColor = getDumbColor(post.dumb_score || 0);
+          return React.createElement(View, {
+            key: post.id,
+            style: {
+              backgroundColor: cardColor,
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 8,
+              borderWidth: 1,
+              borderColor: dumbColor + '30'
+            }
+          },
+            React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 } },
+              React.createElement(Text, { style: { color: dumbColor, fontWeight: '800', fontSize: 16 } }, (post.dumb_emoji || '😐') + ' ' + (post.dumb_score || 0) + '/100'),
+              React.createElement(Text, { style: { color: textSecondary, fontSize: 12 } }, formatTimeAgo(post.created_at_post))
+            ),
+            React.createElement(Text, { style: { color: textPrimary, fontSize: 14, lineHeight: 20 }, numberOfLines: 2 }, post.content)
+          );
+        })
+      ) : null,
+      !isOtherUserProfile ? React.createElement(View, { style: { paddingHorizontal: 16, paddingVertical: 20 } },
+        React.createElement(TouchableOpacity, {
+          style: {
+            backgroundColor: '#EF4444' + '20',
+            borderRadius: 12,
+            padding: 16,
+            alignItems: 'center',
+            borderWidth: 1,
+            borderColor: '#EF4444' + '50'
+          },
+          onPress: handleLogout,
+          componentId: 'profile-logout-btn'
+        },
+          React.createElement(Text, { style: { color: '#EF4444', fontWeight: '800', fontSize: 16 } }, 'Log Out')
+        )
+      ) : null
+    )
+  );
+};
+// @end:ProfileScreen
+
+  // @section:PostDetailScreen @depends:[PostCard,DumbMeter,dumb-score-utils,theme,ThemeContext]
+var PostDetailScreen = function(props) {
+  var navigation = props.navigation;
+  var route = props.route;
+  var authCtx = useAuth();
+  var post = route && route.params ? route.params.post : null;
+  
+  var fallbackPost = {
+    id: 'placeholder',
+    content: 'I accidentally deleted my entire project the day before the deadline and forgot I had no backup. Oops.',
+    owner_id: 'seed-user-1',
+    username: 'oops_master',
+    display_name: 'Oops Master',
+    dumb_score: 85,
+    dumb_title: 'Certified DUMB',
+    dumb_emoji: '🤦',
+    likes_count: 342,
+    comments_count: 67,
+    created_at_post: new Date().toISOString(),
+    image_url: null,
+    avatar_url: null
+  };
+  
+  var currentPost = post || fallbackPost;
+  var themeCtx = useTheme();
+  var theme = themeCtx.theme;
+  var insets = useSafeAreaInsets();
+  
+  var commentsQuery = useQuery('comments', {}, { column: 'created_at_comment', ascending: false });
+  var insertComment = useMutation('comments', 'insert').mutate;
+  
+  var shareHook = useShare();
+  var share = shareHook.share;
+  
+  var commentState = useState('');
+  var commentText = commentState[0];
+  var setCommentText = commentState[1];
+  
+  var likedState = useState(false);
+  var liked = likedState[0];
+  var setLiked = likedState[1];
+  
+  var myComments = useMemo(function() {
+    var all = (commentsQuery.data && commentsQuery.data.length > 0) ? commentsQuery.data : [];
+    return all.filter(function(c) { return c.post_id === currentPost.id; });
+  }, [commentsQuery.data, currentPost.id]);
+  
+  var handleShare = function() {
+    share({ message: 'Check this DUMB confession! 🤦 Score: ' + currentPost.dumb_score + '/100 - ' + currentPost.dumb_title }).then(function(result) {
+      if (result && result.error) {
+        Platform.OS === 'web' ? window.alert(result.error) : Alert.alert('Error', result.error);
+      }
+    });
+  };
+  
+  var handleComment = function() {
+    if (!commentText.trim()) return;
+    
+    if (authCtx.isAnonymous) {
+      Platform.OS === 'web'
+        ? window.alert('Sign up to comment!')
+        : Alert.alert('Sign Up Required', 'Create an account to comment.');
+      return;
+    }
+    
+    insertComment({
+      id: 'comment-' + Date.now(),
+      post_id: currentPost.id,
+      owner_id: authCtx.currentUser.id,
+      content: commentText.trim(),
+      username: authCtx.currentProfile.username,
+      display_name: authCtx.currentProfile.display_name,
+      created_at_comment: new Date().toISOString()
+    }).then(function() {
+      setCommentText('');
+      commentsQuery.refetch();
+    });
+  };
+  
+  var dumbColor = getDumbColor(currentPost.dumb_score || 0);
+  var avatarLetter = (currentPost.display_name || currentPost.username || 'U').charAt(0).toUpperCase();
+  var scrollHeight = Dimensions.get('window').height - insets.top - insets.bottom;
+  
+  return React.createElement(View, { style: { flex: 1, backgroundColor: backgroundColor } },
+    React.createElement(View, {
+      style: {
+        paddingTop: insets.top + 8,
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+        backgroundColor: backgroundColor,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderBottomWidth: 1,
+        borderBottomColor: '#1A1A1A'
+      }
+    },
+      React.createElement(TouchableOpacity, {
+        onPress: function() { navigation.goBack(); },
+        style: { marginRight: 12 },
+        componentId: 'detail-back-btn'
+      },
+        React.createElement(Ionicons, { name: 'arrow-back', size: 24, color: textPrimary })
+      ),
+      React.createElement(Text, { style: { color: textPrimary, fontWeight: '800', fontSize: 18, flex: 1 } }, 'Confession'),
+      React.createElement(TouchableOpacity, {
+        onPress: function() { navigation.navigate('Profile', { userId: currentPost.owner_id || null }); },
+        style: { marginRight: 12 },
+        componentId: 'detail-profile-btn'
+      },
+        React.createElement(Ionicons, { name: 'person-outline', size: 22, color: textSecondary })
+      ),
+      React.createElement(TouchableOpacity, {
+        onPress: handleShare,
+        style: { padding: 4 },
+        componentId: 'detail-share-btn'
+      },
+        React.createElement(Ionicons, { name: 'share-outline', size: 22, color: textSecondary })
+      )
+    ),
+    React.createElement(ScrollView, {
+      style: Platform.OS === 'web' ? { height: scrollHeight, overflow: 'auto' } : { flex: 1 },
+      contentContainerStyle: { paddingBottom: insets.bottom + SCROLL_EXTRA_PADDING + 80 }
+    },
+      React.createElement(View, { style: { padding: 16 } },
+        React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 } },
+          React.createElement(View, {
+            style: {
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              backgroundColor: dumbColor + '30',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 2,
+              borderColor: dumbColor + '60'
+            }
+          },
+            currentPost.avatar_url
+              ? React.createElement(Image, { source: { uri: currentPost.avatar_url }, style: { width: 48, height: 48, borderRadius: 24 } })
+              : React.createElement(Text, { style: { color: dumbColor, fontWeight: '900', fontSize: 20 } }, avatarLetter)
+          ),
+          React.createElement(View, { style: { flex: 1, marginLeft: 12 } },
+            React.createElement(Text, { style: { color: textPrimary, fontWeight: '800', fontSize: 16 } }, currentPost.display_name || currentPost.username || 'Anonymous'),
+            React.createElement(Text, { style: { color: textSecondary, fontSize: 13 } }, '@' + (currentPost.username || 'anonymous') + ' · ' + formatTimeAgo(currentPost.created_at_post))
+          )
+        ),
+        React.createElement(Text, { style: { color: textPrimary, fontSize: 17, lineHeight: 26, marginBottom: 16 } }, currentPost.content),
+        currentPost.image_url ? React.createElement(Image, {
+          source: { uri: currentPost.image_url },
+          style: { width: '100%', height: 220, borderRadius: 12, marginBottom: 16, backgroundColor: '#1A1A1A' },
+          resizeMode: 'cover'
+        }) : null,
+        React.createElement(DumbMeter, {
+          score: currentPost.dumb_score || 0,
+          title: currentPost.dumb_title || 'Mostly Normal',
+          emoji: currentPost.dumb_emoji || '😐',
+          compact: false
+        }),
+        React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, paddingVertical: 12, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#2A2A2A' } },
+          React.createElement(TouchableOpacity, {
+            style: { flexDirection: 'row', alignItems: 'center', marginRight: 24 },
+            onPress: function() { setLiked(function(prev) { return !prev; }); },
+            componentId: 'detail-like-btn'
+          },
+            React.createElement(Ionicons, { name: liked ? 'heart' : 'heart-outline', size: 22, color: liked ? '#FF2D55' : textSecondary }),
+            React.createElement(Text, { style: { color: liked ? '#FF2D55' : textSecondary, marginLeft: 6, fontWeight: '700', fontSize: 15 } },
+              liked ? (currentPost.likes_count || 0) + 1 : (currentPost.likes_count || 0)
+            )
+          ),
+          React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', marginRight: 24 } },
+            React.createElement(Ionicons, { name: 'chatbubble-outline', size: 20, color: textSecondary }),
+            React.createElement(Text, { style: { color: textSecondary, marginLeft: 6, fontWeight: '700', fontSize: 15 } }, (currentPost.comments_count || 0) + myComments.length)
+          ),
+          React.createElement(TouchableOpacity, {
+            style: { flexDirection: 'row', alignItems: 'center' },
+            onPress: handleShare,
+            componentId: 'detail-share2-btn'
+          },
+            React.createElement(Ionicons, { name: 'arrow-redo-outline', size: 20, color: textSecondary }),
+            React.createElement(Text, { style: { color: textSecondary, marginLeft: 6, fontWeight: '700', fontSize: 15 } }, 'Share')
+          )
+        ),
+        React.createElement(Text, { style: { color: textPrimary, fontWeight: '800', fontSize: 16, marginBottom: 12 } }, '💬 Comments'),
+        myComments.length === 0
+          ? React.createElement(View, { style: { alignItems: 'center', paddingVertical: 24 }, componentId: 'comments-empty' },
+            React.createElement(Text, { style: { fontSize: 32 } }, '🤫'),
+            React.createElement(Text, { style: { color: textSecondary, fontSize: 14, marginTop: 8 } }, 'Be the first to roast this confession!')
+          )
+          : myComments.map(function(comment) {
+            return React.createElement(View, {
+              key: comment.id,
+              style: {
+                backgroundColor: cardColor,
+                borderRadius: 12,
+                padding: 12,
+                marginBottom: 8,
+                borderWidth: 1,
+                borderColor: '#2A2A2A'
+              }
+            },
+              React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 } },
+                React.createElement(View, {
+                  style: {
+                    width: 28,
+                    height: 28,
+                    borderRadius: 14,
+                    backgroundColor: primaryColor + '30',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 8
+                  }
+                },
+                  React.createElement(Text, { style: { color: primaryColor, fontWeight: '800', fontSize: 12 } }, (comment.username || 'U').charAt(0).toUpperCase())
+                ),
+                React.createElement(Text, { style: { color: textSecondary, fontSize: 12 } }, '@' + (comment.username || 'anonymous') + ' · ' + formatTimeAgo(comment.created_at_comment))
+              ),
+              React.createElement(Text, { style: { color: textPrimary, fontSize: 14, lineHeight: 20 } }, comment.content)
+            );
+          })
+      )
+    ),
+    React.createElement(KeyboardAvoidingView, {
+      behavior: Platform.OS === 'ios' ? 'padding' : undefined,
+      style: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: '#111',
+        borderTopWidth: 1,
+        borderTopColor: '#2A2A2A',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        paddingBottom: insets.bottom + 10,
+        flexDirection: 'row',
+        alignItems: 'center'
+      }
+    },
+      React.createElement(TextInput, {
+        style: {
+          flex: 1,
+          backgroundColor: cardColor,
+          borderRadius: 20,
+          paddingHorizontal: 16,
+          paddingVertical: 10,
+          color: textPrimary,
+          fontSize: 14,
+          borderWidth: 1,
+          borderColor: '#2A2A2A',
+          marginRight: 10,
+          minHeight: 40
+        },
+        placeholder: authCtx.isAnonymous ? 'Sign up to comment...' : 'Add a comment... 😂',
+        placeholderTextColor: textSecondary,
+        value: commentText,
+        onChangeText: setCommentText,
+        multiline: true,
+        autoCapitalize: 'sentences',
+        editable: !authCtx.isAnonymous,
+        componentId: 'detail-comment-input'
+      }),
+      React.createElement(TouchableOpacity, {
+        style: {
+          backgroundColor: commentText.trim() && !authCtx.isAnonymous ? primaryColor : '#333',
+          borderRadius: 20,
+          padding: 10
+        },
+        onPress: handleComment,
+        disabled: authCtx.isAnonymous,
+        componentId: 'detail-comment-submit'
+      },
+        React.createElement(Ionicons, { name: 'send', size: 18, color: '#FFFFFF' })
+      )
+    )
+  );
+};
+// @end:PostDetailScreen
+
+  // @section:TabNavigator @depends:[HomeScreen,FollowingFeedScreen,DiscoverScreen,LeaderboardScreen,ProfileScreen,navigation-setup]
+  var TabNavigator = function() {
+    var insets = useSafeAreaInsets();
+    var themeCtx = useTheme();
+    var theme = themeCtx.theme;
+    return React.createElement(View, { style: { flex: 1, width: '100%', height: '100%', overflow: 'hidden' } },
+      React.createElement(Tab.Navigator, {
+        screenOptions: {
+          headerShown: false,
+          tabBarStyle: {
+            position: 'absolute',
+            bottom: 0,
+            height: Platform.OS === 'web' ? TAB_MENU_HEIGHT : TAB_MENU_HEIGHT + insets.bottom,
+            paddingBottom: 0,
+            borderTopWidth: 1,
+            borderTopColor: '#1A1A1A',
+            backgroundColor: '#0A0A0A'
+          },
+          tabBarItemStyle: { padding: 0 },
+          tabBarActiveTintColor: primaryColor,
+          tabBarInactiveTintColor: textSecondary
+        }
+      },
+        React.createElement(Tab.Screen, {
+          name: 'Home',
+          component: HomeScreen,
+          options: {
+            tabBarIcon: function(p) { return React.createElement(Ionicons, { name: p.focused ? 'home' : 'home-outline', size: 23, color: p.color }); },
+            tabBarLabel: 'Home'
+          }
+        }),
+        React.createElement(Tab.Screen, {
+          name: 'Following',
+          component: FollowingFeedScreen,
+          options: {
+            tabBarIcon: function(p) { return React.createElement(Ionicons, { name: p.focused ? 'people' : 'people-outline', size: 23, color: p.color }); },
+            tabBarLabel: 'Following'
+          }
+        }),
+        React.createElement(Tab.Screen, {
+          name: 'Discover',
+          component: DiscoverScreen,
+          options: {
+            tabBarIcon: function(p) { return React.createElement(Ionicons, { name: p.focused ? 'compass' : 'compass-outline', size: 23, color: p.color }); },
+            tabBarLabel: 'Discover'
+          }
+        }),
+        React.createElement(Tab.Screen, {
+          name: 'Leaderboard',
+          component: LeaderboardScreen,
+          options: {
+            tabBarIcon: function(p) { return React.createElement(Ionicons, { name: p.focused ? 'trophy' : 'trophy-outline', size: 23, color: p.color }); },
+            tabBarLabel: 'Rankings'
+          }
+        }),
+        React.createElement(Tab.Screen, {
+          name: 'Profile',
+          component: ProfileScreen,
+          options: {
+            tabBarIcon: function(p) { return React.createElement(Ionicons, { name: p.focused ? 'person' : 'person-outline', size: 23, color: p.color }); },
+            tabBarLabel: 'Profile'
+          }
+        })
+      )
+    );
+  };
+  // @end:TabNavigator
+
+  // @section:MainNavigator @depends:[TabNavigator,CreatePostScreen,PostDetailScreen,navigation-setup]
+  var MainNavigator = function() {
+    return React.createElement(Stack.Navigator, {
+      screenOptions: { headerShown: false },
+      initialRouteName: 'Main'
+    },
+      React.createElement(Stack.Screen, { name: 'Main', component: TabNavigator }),
+      React.createElement(Stack.Screen, {
+        name: 'CreatePost',
+        component: CreatePostScreen,
+        options: { presentation: 'modal' }
+      }),
+      React.createElement(Stack.Screen, {
+        name: 'PostDetail',
+        component: PostDetailScreen,
+        initialParams: { postId: null, post: null }
+      })
+    );
+  };
+  // @end:MainNavigator
+
+  // @section:AuthNavigator @depends:[LoginScreen,SignUpScreen,OnboardingTutorial,MainNavigator,navigation-setup]
+  var AuthNavigator = function() {
+    var authCtx = useAuth();
+    if (authCtx.currentUser && authCtx.isFirstTime) {
+      return React.createElement(Stack.Navigator, {
+        screenOptions: { headerShown: false },
+        initialRouteName: 'Onboarding'
+      },
+        React.createElement(Stack.Screen, { name: 'Onboarding', component: OnboardingTutorial }),
+        React.createElement(Stack.Screen, { name: 'MainTabs', component: MainNavigator })
+      );
+    }
+    if (authCtx.currentUser) {
+      return React.createElement(MainNavigator);
+    }
+    return React.createElement(Stack.Navigator, {
+      screenOptions: { headerShown: false },
+      initialRouteName: 'Login'
+    },
+      React.createElement(Stack.Screen, { name: 'Login', component: LoginScreen }),
+      React.createElement(Stack.Screen, { name: 'SignUp', component: SignUpScreen })
+    );
+  };
+  // @end:AuthNavigator
+
+  // @section:styles @depends:[theme]
+  var styles = StyleSheet.create({
+    flex1: { flex: 1 },
+    container: { flex: 1, backgroundColor: backgroundColor },
+    screenPadding: { paddingHorizontal: 16 },
+    card: {
+      backgroundColor: cardColor,
+      borderRadius: 16,
+      padding: 16,
+      marginHorizontal: 16,
+      marginVertical: 6,
+      borderWidth: 1,
+      borderColor: '#2A2A2A'
+    },
+    headerContainer: {
+      backgroundColor: backgroundColor,
+      borderBottomWidth: 1,
+      borderBottomColor: '#1A1A1A'
+    },
+    title: {
+      color: textPrimary,
+      fontWeight: '900',
+      fontSize: 22
+    },
+    subtitle: {
+      color: textSecondary,
+      fontSize: 14
+    },
+    primaryButton: {
+      backgroundColor: primaryColor,
+      borderRadius: 12,
+      paddingVertical: 14,
+      alignItems: 'center'
+    },
+    primaryButtonText: {
+      color: '#FFFFFF',
+      fontWeight: '800',
+      fontSize: 16
+    },
+    fab: {
+      position: 'absolute',
+      right: 20,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: primaryColor,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: primaryColor,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.4,
+      shadowRadius: 8,
+      elevation: 8
+    }
+  });
+  // @end:styles
+
+  // @section:return @depends:[AuthProvider,AuthNavigator,ThemeProvider,styles]
+  return React.createElement(AuthProvider,
+    null,
+    React.createElement(ThemeProvider,
+      null,
+      React.createElement(View, { style: { flex: 1, width: '100%', height: '100%', backgroundColor: backgroundColor } },
+        React.createElement(StatusBar, { barStyle: 'light-content', backgroundColor: backgroundColor }),
+        React.createElement(AuthNavigator)
+      )
+    )
+  );
+  // @end:return
+};
+return ComponentFunction;
